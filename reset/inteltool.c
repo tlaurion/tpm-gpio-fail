@@ -468,8 +468,8 @@ int main(int argc, char *argv[])
 	       exit_code == 126 ? "unknown PCH" :
 	       "hardware access error");
 
-	printf("\nReport results: https://github.com/tlaurion/tpm-gpio-fail/issues\n");
-	printf("Include this log output.\n");
+	//printf("\nReport results: https://github.com/tlaurion/tpm-gpio-fail/issues\n");
+	//printf("Include this log output.\n");
 
 	/* Clean up */
 	pcr_cleanup();
