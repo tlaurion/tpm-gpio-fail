@@ -1,18 +1,24 @@
 // SPDX-License-Identifier: GPL-2.0-only
 //
-// Comet Lake U (CML-U) -- 10th gen mobile (400-series PCH)
+// Comet Lake U/Y (CML-U/Y) -- 10th gen mobile (400-series PCH, LP variant)
 // GPP_B13 (COMM_0, local idx 13) port=0x6e PAD_CFG_BASE=0x600
 // PADCFGLOCK at offset 0x88 (Intel doc 834810)
-// Device IDs: 0x0660, 0x0661
+// Device IDs sourced from Dasharo coreboot src/include/device/pci_ids.h
+// (PCI_DID_INTEL_CMP_*_U/Y_LPC). Note: the original 0x0660/0x0661 IDs
+// are not present in coreboot's pci_ids.h and likely did not correspond
+// to any real CML-U/Y PCH SKU.
 // Supports both LPC and eSPI.
 // PCR_BASE=0xFD000000
 #include "defs.h"
 
 struct platform platform_cml_u = {
-	.name = "CometLake U",
+	.name = "CometLake U/Y",
 	.pchs = (struct pch[]) {
-		{"CML-U PCH", 0x0660},
-		{"CML-U PCH", 0x0661},
+		{"CML-U Super",   0x0281},
+		{"CML-Y Premium", 0x0283},
+		{"CML-U Premium", 0x0284},
+		{"CML-U Base",    0x0285},
+		{"CML-Y Super",   0x0286},
 		{0}
 	},
 	.global_pins = (struct pin[]) {
@@ -46,5 +52,6 @@ struct platform platform_cml_u = {
 	.tier = 2,
 	.summary = "CML-U: untested mobile, CNP-LP-like GPIO layout",
 	.pad_cfg_base = 0x600,
-	.pad_stride = 16
+	.pad_stride = 16,
+	.dw0_offset = 0x860  /* GPP_B13: community-relative pad 38, 0x600 + 38*16 */
 };

@@ -113,6 +113,7 @@ int main(int argc, char *argv[])
 
 	_Bool known_pch = 0;
 	_Bool vulnerable = 1;
+	_Bool no_padcfglock = 0;
 	uint8_t port;
 	uint16_t offset;
 	uint16_t lock_offset;
@@ -216,6 +217,13 @@ int main(int argc, char *argv[])
 			offset = 0x7d0;
 			lock_offset = 0x80;
 			lock_bit = 1 << 13;
+		} else if ((sb->device_id & 0xfff0) == 0x5480) {
+			printf("Found Alder Point N\n");
+			known_pch = 1;
+			port = 0x6e;
+			offset = 0x7d0;
+			lock_offset = 0x80;
+			lock_bit = 1 << 13;
 		} else if ((sb->device_id & 0xfff0) == 0xa300
 			   && sb->device_id >= 0xa304
 			   && sb->device_id <= 0xa30e) {
@@ -225,19 +233,24 @@ int main(int argc, char *argv[])
 			offset = 0x6d0;
 			lock_offset = 0x88;
 			lock_bit = 1 << 13;
-		} else if ((sb->device_id & 0xfff0) == 0x0680
-			   && sb->device_id >= 0x0684) {
+		} else if (((sb->device_id & 0xfff0) == 0x0680
+			   && sb->device_id >= 0x0684)
+			   || sb->device_id == 0x0697) {
+			/* 400-series CNL/CFL-compatible GPIO IP -- NOT SPT.
+			 * port 0x6e (PID_GPIOCOM0), GPP_B13 community-relative pad 38,
+			 * DW0 offset = 0x600 + 38*16 = 0x860.
+			 * PADCFGLOCK: base 0x80, GPP_B is group 1 -> lock_offset 0x88, bit 13. */
 			printf("Found Comet Lake Desktop PCH\n");
 			known_pch = 1;
-			port = 0xaf;
-			offset = 0x528;
-			lock_offset = 0xb0;
-			lock_bit = 1 << 5;
-		} else if (sb->device_id >= 0x0660 && sb->device_id <= 0x0661) {
-			printf("Found Comet Lake U PCH\n");
+			port = 0x6e;
+			offset = 0x860;
+			lock_offset = 0x88;
+			lock_bit = 1 << 13;
+		} else if ((sb->device_id & 0xfff8) == 0x0280) {
+			printf("Found Comet Lake U/Y PCH\n");
 			known_pch = 1;
 			port = 0x6e;
-			offset = 0x6d0;
+			offset = 0x860;  /* GPP_B13: community-relative pad 38, 0x600 + 38*16 */
 			lock_offset = 0x88;
 			lock_bit = 1 << 13;
 		} else if ((sb->device_id & 0xfff0) == 0x9d80
@@ -274,6 +287,50 @@ int main(int argc, char *argv[])
 			printf("Found Meteor Lake PCH - NOT VULNERABLE to PLTRST# assertion\n");
 			known_pch = 1;
 			vulnerable = 0;
+		} else if ((sb->device_id & 0xfff8) == 0x4b00) {
+			/* Elkhart Lake: GPP_B0 is community0's first pad (index 0),
+			 * so GPP_B13's community-relative pad index equals 13 and
+			 * offset = PAD_CFG_BASE(0x700) + 13*16 = 0x7d0.
+			 * PADCFGLOCK base offset (0x80) is UNCONFIRMED for this SoC --
+			 * coreboot never wires up SMM pad locking for EHL, so this is
+			 * inferred by analogy with Jasper Lake/older gens, not sourced
+			 * from an EHL-specific coreboot lock table. See detect/platforms/ehl.c. */
+			printf("Found Elkhart Lake PCH (PADCFGLOCK offset unconfirmed)\n");
+			known_pch = 1;
+			port = 0x6e;
+			offset = 0x7d0;
+			lock_offset = 0x80;
+			lock_bit = 1 << 13;
+		} else if (sb->device_id == 0x4d87) {
+			/* Jasper Lake: GPP_B is community0's 3rd group (index 2), behind
+			 * GPP_F and a reserved SPI0 group, so GPP_B13's community-relative
+			 * pad index is 42, not 13: offset = PAD_CFG_BASE(0x600) + 42*16
+			 * = 0x8a0. PADCFGLOCK base (0x80) IS confirmed directly in
+			 * coreboot's jasperlake gpio_defs.h; lock_offset = 0x80 + group
+			 * index(2)*8 = 0x90, per coreboot's gpio_lock_pads() stepping.
+			 * See detect/platforms/jsl.c. */
+			printf("Found Jasper Lake PCH\n");
+			known_pch = 1;
+			port = 0x6e;
+			offset = 0x8a0;
+			lock_offset = 0x90;
+			lock_bit = 1 << 13;
+		} else if (sb->device_id == 0x31e8 || sb->device_id == 0x3197) {
+			/* Gemini Lake: GPIO_98 = PMU_PLTRST_N, community NORTH (PID_GPIO_N=0xC5).
+			 * GPIO_98 = N_OFFSET(80) + 22 = community-relative pad 22.
+			 * DW0 offset = PAD_CFG_BASE(0x600) + 22*16 = 0x760.
+			 * NO PADCFGLOCK register on GLK/APL -- pad is always writable.
+			 * Confirmed: coreboot apollolake gpio_glk.c has no pad_cfg_lock_offset
+			 * and SOC_INTEL_COMMON_BLOCK_SMM_LOCK_GPIO_PADS is not selected.
+			 * SBREG_BAR = 0xD0000000 (apollolake/Kconfig). */
+			printf("Found Gemini Lake PCH (%s) -- no PADCFGLOCK register\n",
+			       sb->device_id == 0x31e8 ? "LPC" : "eSPI");
+			known_pch = 1;
+			no_padcfglock = 1;
+			port = 0xc5;
+			offset = 0x760;
+			lock_offset = 0;
+			lock_bit = 1;
 		} else {
 			printf("Unknown PCH device ID %04x\n", sb->device_id);
 		}
@@ -291,26 +348,31 @@ int main(int argc, char *argv[])
 
 	if (known_pch && vulnerable) {
 		/* Check pad lock status before attempting assertion */
-		uint32_t lock_val = read_pcr32(port, lock_offset);
-		uint32_t locktx_val = read_pcr32(port, lock_offset + 4);
-		int bit = __builtin_ctz(lock_bit);
-		int cfg_locked = !!(lock_val & lock_bit);
-		int tx_locked = !!(locktx_val & lock_bit);
+		if (no_padcfglock) {
+			printf("\n--- PADCFGLOCK Status ---\n");
+			printf("No PADCFGLOCK register on this platform -- pad is always writable\n");
+		} else {
+			uint32_t lock_val = read_pcr32(port, lock_offset);
+			uint32_t locktx_val = read_pcr32(port, lock_offset + 4);
+			int bit = __builtin_ctz(lock_bit);
+			int cfg_locked = !!(lock_val & lock_bit);
+			int tx_locked = !!(locktx_val & lock_bit);
 
-		printf("\n--- PADCFGLOCK Status (port 0x%x, offset 0x%x) ---\n", port, lock_offset);
-		printf("PADCFGLOCK   = 0x%08x (%s, bit %d %s)\n",
-		       lock_val,
-		       cfg_locked ? "LOCKED" : "UNLOCKED",
-		       bit,
-		       cfg_locked ? "set" : "clear");
-		printf("PADCFGLOCKTX = 0x%08x (%s, bit %d %s)\n",
-		       locktx_val,
-		       tx_locked ? "LOCKED" : "UNLOCKED",
-		       bit,
-		       tx_locked ? "set" : "clear");
+			printf("\n--- PADCFGLOCK Status (port 0x%x, offset 0x%x) ---\n", port, lock_offset);
+			printf("PADCFGLOCK   = 0x%08x (%s, bit %d %s)\n",
+			       lock_val,
+			       cfg_locked ? "LOCKED" : "UNLOCKED",
+			       bit,
+			       cfg_locked ? "set" : "clear");
+			printf("PADCFGLOCKTX = 0x%08x (%s, bit %d %s)\n",
+			       locktx_val,
+			       tx_locked ? "LOCKED" : "UNLOCKED",
+			       bit,
+			       tx_locked ? "set" : "clear");
 
-		if (cfg_locked || tx_locked) {
-			printf("\nWARNING: Pad is LOCKED -- assertion write will be silently ignored!\n");
+			if (cfg_locked || tx_locked) {
+				printf("\nWARNING: Pad is LOCKED -- assertion write will be silently ignored!\n");
+			}
 		}
 
 		/* Read PCRs before assertion */

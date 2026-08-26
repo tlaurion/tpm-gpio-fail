@@ -18,6 +18,7 @@ extern struct platform platform_skl_kbl_s_h;
 extern struct platform platform_skl_kbl_lp;
 extern struct platform platform_cfl_s_h;
 extern struct platform platform_adl_p;
+extern struct platform platform_adl_n;
 extern struct platform platform_adl_s;
 extern struct platform platform_rpl_s;
 extern struct platform platform_rpl_p;
@@ -28,12 +29,16 @@ extern struct platform platform_tgl;
 extern struct platform platform_arl_s;
 extern struct platform platform_mtl;
 extern struct platform platform_pre_skl;
+extern struct platform platform_ehl;
+extern struct platform platform_jsl;
+extern struct platform platform_glk;
 
 static struct platform *platforms[] = {
 	&platform_skl_kbl_s_h,
 	&platform_skl_kbl_lp,
 	&platform_cfl_s_h,
 	&platform_adl_p,
+	&platform_adl_n,
 	&platform_adl_s,
 	&platform_rpl_s,
 	&platform_rpl_p,
@@ -44,6 +49,9 @@ static struct platform *platforms[] = {
 	&platform_arl_s,
 	&platform_mtl,
 	&platform_pre_skl,
+	&platform_ehl,
+	&platform_jsl,
+	&platform_glk,
 	NULL
 };
 
@@ -101,16 +109,22 @@ static int scan_platform(struct platform *platform)
 	int status = 0;
 	if (platform->global_pins) {
 		printf("\n--- PLTRST# Pad Lock Status ---\n");
-		printf("  %-10s %-12s %-22s %-22s\n",
-		       "GPIO", "Signal", "PADCFGLOCK", "PADCFGLOCKTX");
-		status = detect_pinset(platform->global_pins);
+		if (platform->no_padcfglock) {
+			printf("  No PADCFGLOCK register on this platform -- pad is always unlocked\n");
+			status = 1;
+		} else {
+			printf("  %-10s %-12s %-22s %-22s\n",
+			       "GPIO", "Signal", "PADCFGLOCK", "PADCFGLOCKTX");
+			status = detect_pinset(platform->global_pins);
+		}
 	} else {
 		printf("No PLTRST# pad definition for this platform (not affected)\n");
 	}
 
 	/* Read DW0 to check pad mode */
 	if (platform->global_pins && platform->pad_cfg_base > 0) {
-		uint32_t dw0_offs = platform->pad_cfg_base +
+		uint32_t dw0_offs = platform->dw0_offset ? platform->dw0_offset :
+			platform->pad_cfg_base +
 			(__builtin_ctz(platform->global_pins->lock_bit) * platform->pad_stride);
 		uint32_t dw0 = pcr_read32(platform->global_pins->port, dw0_offs);
 		uint32_t pad_mode = (dw0 >> 10) & 0xf;
@@ -125,18 +139,26 @@ static int scan_platform(struct platform *platform)
 	}
 
 	int is_espi = 1;
-	if (platform->lpc_pins)
-		is_espi = !!(pcr_read32(platform->espi_check_port, platform->espi_check_offset) & platform->espi_check_bit);
+	if (platform->lpc_pins) {
+		if (platform->espi_check_bit == 0)
+			is_espi = 0;  /* device ID implies LPC, no register read needed */
+		else
+			is_espi = !!(pcr_read32(platform->espi_check_port, platform->espi_check_offset) & platform->espi_check_bit);
+	}
 
 	if (platform->espi_pins || platform->lpc_pins) {
 		printf("\n--- %s Bus Pin Lock Status ---\n",
 		       is_espi ? "eSPI" : "LPC");
-		printf("  %-10s %-12s %-22s %-22s\n",
-		       "GPIO", "Signal", "PADCFGLOCK", "PADCFGLOCKTX");
-		if (is_espi)
-			status += detect_pinset(platform->espi_pins);
-		else
-			status += detect_pinset(platform->lpc_pins);
+		if (platform->no_padcfglock) {
+			printf("  No PADCFGLOCK register on this platform -- pins are always unlocked\n");
+		} else {
+			printf("  %-10s %-12s %-22s %-22s\n",
+			       "GPIO", "Signal", "PADCFGLOCK", "PADCFGLOCKTX");
+			if (is_espi)
+				status += detect_pinset(platform->espi_pins);
+			else
+				status += detect_pinset(platform->lpc_pins);
+		}
 	} else {
 		printf("No bus pins defined for this platform\n");
 	}
@@ -239,22 +261,29 @@ int main(void)
 		uint16_t dev = isa_device;
 		/* Mobile PCH families: SBREG_BAR = 0xFD000000 */
 		if ((dev & 0xfff0) == 0x5180 ||   /* ADL-P */
+		    (dev & 0xfff0) == 0x5480 ||   /* ADL-N */
 		    (dev & 0xfff0) == 0x5190 ||   /* RPL-P */
 		    (dev & 0xfff0) == 0xa080 ||   /* TGL (0xa082-0xa08f) */
 		    (dev & 0xfff0) == 0xa0a0 ||   /* TGL (0xa0a0-0xa0a7) */
-		    (dev & 0xfff0) == 0x0680 ||   /* CML-DT */
-		    dev == 0x0660 || dev == 0x0661 || /* CML-U */
+		    (dev & 0xfff8) == 0x0280 ||   /* CML-U/Y (0x0281,0x0283-0x0286) */
 		    (dev & 0xfff0) == 0x9d80 ||   /* CNP-LP */
-		    (dev & 0xfff0) == 0xa140 ||   /* SPT (0xa143-0xa14e) */
-		    (dev & 0xfff0) == 0xa2c0 ||   /* KBP (0xa2c4-0xa2d2) */
-		    (dev & 0xfff0) == 0xa300 ||   /* CFL-S (0xa304-0xa30e) */
+		    (dev & 0xfff0) == 0xa140 ||   /* SPT-LP (0xa143-0xa14e) */
+		    (dev & 0xfff0) == 0xa2c0 ||   /* KBP-LP (0xa2c4-0xa2d2) */
+		    (dev & 0xfff0) == 0x4b00 ||   /* EHL (0x4b00-0x4b07) */
+		    dev == 0x4d87 ||              /* JSL */
 		    (dev & 0xfff0) == 0x7e00) {   /* MTL (0x7e00-0x7e07) */
 			sbreg_base = 0xFD000000ULL;
 		/* Desktop PCH families: SBREG_BAR = 0xE0000000 */
 		} else if ((dev & 0xfff0) == 0x7a80 || /* ADL-S */
 			   (dev & 0xfff0) == 0x7a00 || /* RPL-S (0x7a0c-0x7a17) */
-			   (dev & 0xfff0) == 0x7e20) { /* ARL-S */
+			   (dev & 0xfff0) == 0x7e20 || /* ARL-S */
+			   (dev & 0xfff0) == 0x0680 || /* CML-DT/H (0x0684-0x068f) */
+			   dev == 0x0697 ||            /* CML-H W480 */
+			   (dev & 0xfff0) == 0xa300) { /* CFL-S (0xa304-0xa30e) */
 			sbreg_base = 0xE0000000ULL;
+		/* Gemini Lake: SBREG_BAR = 0xD0000000 */
+		} else if (dev == 0x31e8 || dev == 0x3197) {
+			sbreg_base = 0xD0000000ULL;
 		}
 		if (sbreg_base == 0) {
 			fprintf(stderr, "Failed to determine SBREG_BAR for device %04x\n", dev);

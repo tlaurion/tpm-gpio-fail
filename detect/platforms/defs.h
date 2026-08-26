@@ -29,4 +29,17 @@ struct platform {
 	const char *summary;   /* one-line vulnerability description */
 	uint32_t pad_cfg_base; /* PAD_CFG_BASE offset within community */
 	uint8_t  pad_stride;   /* bytes per pad (NUM_PAD_CFG_REGS * 4) */
+	uint32_t dw0_offset;   /* optional: explicit PLTRST# pad DW0 offset override.
+	                        * Leave 0 to auto-derive as
+	                        * pad_cfg_base + (bit index of global_pins->lock_bit)*pad_stride,
+	                        * which is only correct when the PLTRST# pin's group is the
+	                        * first group in its PCR community (true for most platforms
+	                        * in this tree). Set explicitly when that assumption doesn't
+	                        * hold, e.g. because the group's community-relative pad index
+	                        * differs from the pin's local bit number (see jsl.c). */
+	int no_padcfglock;     /* 1 = platform has no PADCFGLOCK register (e.g. GLK/APL).
+	                        * The detect tool will report "always unlocked" rather than
+	                        * reading a lock register that doesn't exist. The assert tool
+	                        * skips the lock status check and proceeds directly to the
+	                        * pad mode transition. */
 };
