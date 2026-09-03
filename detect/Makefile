@@ -1,10 +1,24 @@
 CFLAGS = -std=gnu11 -Wall -Wno-unused-function
-LDLIBS =
-OBJ = detect.o platforms/skl_kbl.o platforms/cfl.o
+LDLIBS = -lpci -lpci
+OBJ = detect.o \
+	platforms/skl_kbl.o \
+	platforms/cfl.o \
+	platforms/adl_p.o \
+	platforms/adl_s.o \
+	platforms/rpl_p.o \
+	platforms/rpl_s.o \
+	platforms/cnp_lp.o \
+	platforms/cml_u.o \
+	platforms/cml_dt.o \
+	platforms/tgl.o \
+	platforms/arl_s.o \
+	platforms/mtl.o \
+	platforms/pre_skl.o
 
 .PHONY: clean
 
-detect: $(OBJ)
+tpm-gpio-detect: $(OBJ)
+	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
 clean:
-	rm -f detect $(OBJ)
+	rm -f tpm-gpio-detect $(OBJ)

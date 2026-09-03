@@ -1,17 +1,31 @@
-# TPM GPIO fail vulnerability
+# TPM GPIO Reset Attack PoC for Heads
 
-NOTE: this PoC isn't fully complete yet and only support some example platforms.
+Based on [kukrimate/tpm-gpio-fail](https://github.com/kukrimate/tpm-gpio-fail) by Mate Kukri.
+<https://mkukri.xyz/2024/06/01/tpm-gpio-fail.html>
 
-## Detection utility
+The `detect` tool is extended from kukri's `detect/detect.c`. The `assert` tool
+is based on kukri's modified coreboot `reset/inteltool.c`. The top-level Makefile
+builds them as `tpm-gpio-detect` and `tpm-gpio-assert` for Heads recovery shell.
 
-See `detect` directory.
+`tpm-gpio-assert` calls `tpm2 shutdown -c` before assertion and `tpm2 startup -c`
+after, following kukri's documented procedure. PCR values are shown before and
+after assertion.
 
-## Reset PoC
+Built for Heads by `modules/tpm-gpio-reset`. Uses libpci, /dev/mem for PCR access.
 
-See `reset` directory, currently SPT-S/H, KBP-S/H, ADL-S/H, and RPL-S/H are supported.
+## Usage (Heads recovery shell)
 
-1. Compile with `make`
-2. Then run `tpm2_shutdown -c && ./inteltool && tpm2_startup -c` (needs tpm2-tools)
-3. Check PCRs via sysfs.
+```bash
+# Audit (safe, read-only)
+tpm-gpio-detect 2>&1 | tee /media/tpm-gpio-detect.log
 
-Errors/warnings shown by tpm2-tools are likely normal and can be ignored as long as PCRs are clear in step 3.
+# Execute
+tpm-gpio-assert 2>&1 | tee /media/tpm-gpio-assert.log
+```
+
+## Tested
+
+NV4x ADL-P (0x5182): pads unlocked, NF1 mode confirmed, PCRs cleared to zero.
+
+All other platform families are untested. Report results at:
+<https://github.com/tlaurion/tpm-gpio-fail/issues>

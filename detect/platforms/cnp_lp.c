@@ -1,23 +1,34 @@
 // SPDX-License-Identifier: GPL-2.0-only
+//
+// Cannon Point LP (CNP-LP) -- Kaby Lake-R / Whiskey Lake (300-series)
+// GPP_B13 (COMM_0, local idx 38) port=0x6e PAD_CFG_BASE=0x600
+// NOTE: No PADCFGLOCK register exists on CNP-LP proper.
+// _get_lock_base returns 0x80 but the register read returns 0x0 / is absent.
+// Device IDs: 0x9d84-0x9d8f
+// UNTESTED: kukri's PoC does not support this PCH family.
+// Supports both LPC and eSPI.
+// PCR_BASE=0xFD000000
 #include "defs.h"
 
-struct platform platform_cfl_s_h = {
-	.name = "CoffeeLake S/H",
+struct platform platform_cnp_lp = {
+	.name = "Cannon Point LP",
 	.pchs = (struct pch[]) {
-		// Intel 300 Series and Intel C240 Series
-		{"Q370", 0xa306},
-		{"H370", 0xa304},
-		{"Z390", 0xa305},
-		{"B360", 0xa308},
-		{"H310", 0xa303},
-		{"C242", 0xa30a},
-		{"C246", 0xa309},
-		{"HM370", 0xa30d},
-		{"QM370", 0xa30c},
-		{"CM246", 0xa30e},
+		{"CNP-LP PCH", 0x9d84},
+		{"CNP-LP PCH", 0x9d85},
+		{"CNP-LP PCH", 0x9d86},
+		{"CNP-LP PCH", 0x9d87},
+		{"CNP-LP PCH", 0x9d88},
+		{"CNP-LP PCH", 0x9d89},
+		{"CNP-LP PCH", 0x9d8a},
+		{"CNP-LP PCH", 0x9d8b},
+		{"CNP-LP PCH", 0x9d8c},
+		{"CNP-LP PCH", 0x9d8d},
+		{"CNP-LP PCH", 0x9d8e},
+		{"CNP-LP PCH", 0x9d8f},
+		{0}
 	},
 	.global_pins = (struct pin[]) {
-		{ "GPP_B13", "PLTRST#",    0x6e, 0x88, 1<<13 },
+		{ "GPP_B13", "PLTRST#",    0x6e, 0x88, 1<<6 },
 		{0}
 	},
 	.espi_check_port = 0xc7,
@@ -45,9 +56,7 @@ struct platform platform_cfl_s_h = {
 		{0}
 	},
 	.tier = 2,
-	.summary = "CFL S/H: Cannonlake GPIO arch, untested",
+	.summary = "CNP-LP: PADCFGLOCK absent per Intel 834810, untested",
 	.pad_cfg_base = 0x600,
 	.pad_stride = 16
 };
-
-// FIXME: add Coffee Lake (and Amber Lake) LP

@@ -1,23 +1,42 @@
 // SPDX-License-Identifier: GPL-2.0-only
+//
+// Tiger Lake (TGL) -- 11th gen mobile/desktop
+// GPP_B13 (COMM_0, local idx 13) port=0x6e PAD_CFG_BASE=0x700
+// PADCFGLOCK at offset 0x80 (Intel doc 834810)
+// Device IDs: 0xa082-0xa08f, 0xa0a0-0xa0a7
+// Supports both LPC and eSPI.
+// PCR_BASE=0xFD000000
 #include "defs.h"
 
-struct platform platform_cfl_s_h = {
-	.name = "CoffeeLake S/H",
+struct platform platform_tgl = {
+	.name = "TigerLake",
 	.pchs = (struct pch[]) {
-		// Intel 300 Series and Intel C240 Series
-		{"Q370", 0xa306},
-		{"H370", 0xa304},
-		{"Z390", 0xa305},
-		{"B360", 0xa308},
-		{"H310", 0xa303},
-		{"C242", 0xa30a},
-		{"C246", 0xa309},
-		{"HM370", 0xa30d},
-		{"QM370", 0xa30c},
-		{"CM246", 0xa30e},
+		{"TGL PCH", 0xa082},
+		{"TGL PCH", 0xa083},
+		{"TGL PCH", 0xa084},
+		{"TGL PCH", 0xa085},
+		{"TGL PCH", 0xa086},
+		{"TGL PCH", 0xa087},
+		{"TGL PCH", 0xa088},
+		{"TGL PCH", 0xa089},
+		{"TGL PCH", 0xa08a},
+		{"TGL PCH", 0xa08b},
+		{"TGL PCH", 0xa08c},
+		{"TGL PCH", 0xa08d},
+		{"TGL PCH", 0xa08e},
+		{"TGL PCH", 0xa08f},
+		{"TGL PCH", 0xa0a0},
+		{"TGL PCH", 0xa0a1},
+		{"TGL PCH", 0xa0a2},
+		{"TGL PCH", 0xa0a3},
+		{"TGL PCH", 0xa0a4},
+		{"TGL PCH", 0xa0a5},
+		{"TGL PCH", 0xa0a6},
+		{"TGL PCH", 0xa0a7},
+		{0}
 	},
 	.global_pins = (struct pin[]) {
-		{ "GPP_B13", "PLTRST#",    0x6e, 0x88, 1<<13 },
+		{ "GPP_B13", "PLTRST#",    0x6e, 0x80, 1<<13 },
 		{0}
 	},
 	.espi_check_port = 0xc7,
@@ -44,10 +63,8 @@ struct platform platform_cfl_s_h = {
 		{"GPP_A14", "ESPI_RESET#", 0x6e, 0x80, 1<<14 },
 		{0}
 	},
-	.tier = 2,
-	.summary = "CFL S/H: Cannonlake GPIO arch, untested",
-	.pad_cfg_base = 0x600,
+	.tier = 3,
+	.summary = "TGL: attack not confirmed on this PCH die",
+	.pad_cfg_base = 0x700,
 	.pad_stride = 16
 };
-
-// FIXME: add Coffee Lake (and Amber Lake) LP

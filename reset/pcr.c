@@ -146,18 +146,40 @@ void pcr_init(struct pci_dev *const sb)
 	case PCI_DEVICE_ID_INTEL_C252:
 	case PCI_DEVICE_ID_INTEL_C256:
 	case PCI_DEVICE_ID_INTEL_W580:
+	case 0x0660: case 0x0661: /* CML-U */
+	case 0x0684: case 0x0685: case 0x0686: case 0x0687:
+	case 0x0688: case 0x0689: case 0x068a: case 0x068b:
+	case 0x068c: case 0x068d: case 0x068e: case 0x068f: /* CML-DT */
+	case 0x7e00: case 0x7e01: case 0x7e02: case 0x7e03:
+	case 0x7e04: case 0x7e05: case 0x7e06: case 0x7e07: /* MTL */
 	case PCI_DEVICE_ID_INTEL_CANNONPOINT_LP_U_PREM:
+	case 0x9d85: case 0x9d86: case 0x9d87: case 0x9d88:
+	case 0x9d89: case 0x9d8a: case 0x9d8b: case 0x9d8c:
+	case 0x9d8d: case 0x9d8e: case 0x9d8f: /* CNP-LP */
 	case PCI_DEVICE_ID_INTEL_COMETPOINT_LP_U_PREM:
 	case PCI_DEVICE_ID_INTEL_COMETPOINT_LP_U_BASE:
 	case PCI_DEVICE_ID_INTEL_ICELAKE_LP_U:
 	case PCI_DEVICE_ID_INTEL_TIGERPOINT_U_SUPER:
 	case PCI_DEVICE_ID_INTEL_TIGERPOINT_U_PREM:
 	case PCI_DEVICE_ID_INTEL_TIGERPOINT_U_BASE:
+	case 0xa084: case 0xa085: /* TGL U missing */
 	case PCI_DEVICE_ID_INTEL_TIGERPOINT_Y_SUPER:
 	case PCI_DEVICE_ID_INTEL_TIGERPOINT_Y_PREM:
+	case 0xa088: case 0xa089: case 0xa08a: case 0xa08b:
+	case 0xa08c: case 0xa08d: case 0xa08e: case 0xa08f: /* TGL U/Y missing */
+	case 0xa0a0: case 0xa0a1: case 0xa0a2: case 0xa0a3:
+	case 0xa0a4: case 0xa0a5: case 0xa0a6: case 0xa0a7: /* TGL U/Y missing */
 	case PCI_DEVICE_ID_INTEL_ADL_P:
 	case PCI_DEVICE_ID_INTEL_ADL_M:
+	case 0x5180: case 0x5181: case 0x5183: case 0x5184:
+	case 0x5185: case 0x5186: case 0x5188: case 0x5189:
+	case 0x518a: case 0x518b: case 0x518c: case 0x518d:
+	case 0x518e: case 0x518f: /* ADL-P missing */
 	case PCI_DEVICE_ID_INTEL_RPL_P:
+	case 0x5190: case 0x5191: case 0x5192: case 0x5193:
+	case 0x5194: case 0x5195: case 0x5196: case 0x5197:
+	case 0x5198: case 0x5199: case 0x519a: case 0x519b:
+	case 0x519c: case 0x519e: case 0x519f: /* RPL-P missing */
 	case PCI_DEVICE_ID_INTEL_EHL:
 	case PCI_DEVICE_ID_INTEL_JSL:
 	case PCI_DEVICE_ID_INTEL_EBG:
@@ -183,11 +205,19 @@ void pcr_init(struct pci_dev *const sb)
 	case PCI_DEVICE_ID_INTEL_WM790:
 	case PCI_DEVICE_ID_INTEL_C262:
 	case PCI_DEVICE_ID_INTEL_C266:
+	case 0x7a80: case 0x7a81: case 0x7a82: case 0x7a89:
+	case 0x7a8b: /* ADL-S missing */
+	case 0x7a0e: case 0x7a0f: case 0x7a10: case 0x7a11:
+	case 0x7a12: case 0x7a15: case 0x7a16: case 0x7a17: /* RPL-S missing */
+	case 0x7e20: case 0x7e21: case 0x7e22: case 0x7e23:
+	case 0x7e24: case 0x7e25: case 0x7e26: case 0x7e27:
+	case 0x7e28: case 0x7e29: case 0x7e2a: case 0x7e2b:
+	case 0x7e2c: case 0x7e2d: case 0x7e2e: case 0x7e2f: /* ARL-S */
 		sbbar_phys = 0xe0000000;
 		use_p2sb = false;
 		break;
 	default:
-		perror("Unknown LPC device.");
+		fprintf(stderr, "Unknown LPC device ID %04x -- not in pcr.c database.\nReport at https://github.com/tlaurion/tpm-gpio-fail/issues\n", sb->device_id);
 		exit(1);
 	}
 

@@ -1,4 +1,5 @@
 LDLIBS = -lpci
-inteltool: inteltool.o pcr.o
+tpm-gpio-assert: inteltool.o pcr.o
+	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
 clean:
-	rm -f *.o inteltool
+	rm -f *.o tpm-gpio-assert
