@@ -16,11 +16,17 @@ Built for Heads by `modules/tpm-gpio-reset`. Uses libpci, /dev/mem for PCR acces
 ## Usage (Heads recovery shell)
 
 ```bash
+#Mount USB thumb drive read+write
+mount-usb --mode rw
+
 # Audit (safe, read-only)
 tpm-gpio-detect 2>&1 | tee /media/tpm-gpio-detect.log
 
 # Execute
 tpm-gpio-assert 2>&1 | tee /media/tpm-gpio-assert.log
+
+#Unmount usb thumb drive
+umount /media
 ```
 
 ## Tested
