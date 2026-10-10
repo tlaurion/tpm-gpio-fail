@@ -17,7 +17,7 @@ Built for Heads by `modules/tpm-gpio-reset`. Uses libpci, /dev/mem for PCR acces
 
 ```bash
 #Mount USB thumb drive read+write
-mount-usb --mode rw
+mount-usb.sh --mode rw
 
 # Audit (safe, read-only)
 tpm-gpio-detect 2>&1 | tee /media/tpm-gpio-detect.log
