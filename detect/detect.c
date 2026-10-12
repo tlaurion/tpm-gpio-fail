@@ -259,27 +259,28 @@ int main(void)
 	 * SBREG_BAR from Intel datasheets. Matches inteltool pcr.c approach. */
 	if (sbreg_base == 0) {
 		uint16_t dev = isa_device;
-		/* Mobile PCH families: SBREG_BAR = 0xFD000000 */
-		if ((dev & 0xfff0) == 0x5180 ||   /* ADL-P */
+		/* PCH families with SBREG_BAR = 0xFD000000 */
+		if ((dev & 0xfff0) == 0x9d40 ||   /* SKL/KBL LP (0x9d4b-0x9d58; T480 live: P2SB BAR0 = 0xfd000000) */
+		    (dev & 0xfff0) == 0x9d50 ||
+		    (dev & 0xfff0) == 0xa140 ||   /* SPT-H (0xa143-0xa14e) */
+		    (dev & 0xfff0) == 0xa2c0 ||   /* KBP-H (0xa2c4-0xa2d2) */
+		    (dev & 0xfff0) == 0xa300 ||   /* CFL-S (0xa304-0xa30e) */
+		    (dev & 0xfff0) == 0x0680 ||   /* CML-DT/H (0x0684-0x068f) */
+		    dev == 0x0697 ||              /* CML-H W480 */
+		    (dev & 0xfff0) == 0x5180 ||   /* ADL-P */
 		    (dev & 0xfff0) == 0x5480 ||   /* ADL-N */
 		    (dev & 0xfff0) == 0x5190 ||   /* RPL-P */
 		    (dev & 0xfff0) == 0xa080 ||   /* TGL (0xa082-0xa08f) */
-		    (dev & 0xfff0) == 0xa0a0 ||   /* TGL (0xa0a0-0xa0a7) */
 		    (dev & 0xfff8) == 0x0280 ||   /* CML-U/Y (0x0281,0x0283-0x0286) */
 		    (dev & 0xfff0) == 0x9d80 ||   /* CNP-LP */
-		    (dev & 0xfff0) == 0xa140 ||   /* SPT-LP (0xa143-0xa14e) */
-		    (dev & 0xfff0) == 0xa2c0 ||   /* KBP-LP (0xa2c4-0xa2d2) */
 		    (dev & 0xfff0) == 0x4b00 ||   /* EHL (0x4b00-0x4b07) */
-		    dev == 0x4d87 ||              /* JSL */
-		    (dev & 0xfff0) == 0x7e00) {   /* MTL (0x7e00-0x7e07) */
+		    dev == 0x4d87) {              /* JSL */
 			sbreg_base = 0xFD000000ULL;
-		/* Desktop PCH families: SBREG_BAR = 0xE0000000 */
+		/* PCH families with SBREG_BAR = 0xE0000000 */
 		} else if ((dev & 0xfff0) == 0x7a80 || /* ADL-S */
 			   (dev & 0xfff0) == 0x7a00 || /* RPL-S (0x7a0c-0x7a17) */
 			   (dev & 0xfff0) == 0x7e20 || /* ARL-S */
-			   (dev & 0xfff0) == 0x0680 || /* CML-DT/H (0x0684-0x068f) */
-			   dev == 0x0697 ||            /* CML-H W480 */
-			   (dev & 0xfff0) == 0xa300) { /* CFL-S (0xa304-0xa30e) */
+			   (dev & 0xfff0) == 0x7e00) { /* MTL (0x7e00-0x7e07) */
 			sbreg_base = 0xE0000000ULL;
 		/* Gemini Lake: SBREG_BAR = 0xD0000000 */
 		} else if (dev == 0x31e8 || dev == 0x3197) {

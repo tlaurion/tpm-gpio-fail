@@ -3,7 +3,8 @@
 // Tiger Lake (TGL) -- 11th gen mobile/desktop
 // GPP_B13 (COMM_0, local idx 13) port=0x6e PAD_CFG_BASE=0x700
 // PADCFGLOCK at offset 0x80 (Intel doc 834810)
-// Device IDs: 0xa082-0xa08f, 0xa0a0-0xa0a7
+// Device IDs: 0xa082-0xa08f (0xa0a0-0xa0a7 are TGL function-device IDs,
+// not ISA bridges, and are not listed here)
 // Supports both LPC and eSPI.
 // PCR_BASE=0xFD000000
 #include "defs.h"
@@ -25,14 +26,6 @@ struct platform platform_tgl = {
 		{"TGL PCH", 0xa08d},
 		{"TGL PCH", 0xa08e},
 		{"TGL PCH", 0xa08f},
-		{"TGL PCH", 0xa0a0},
-		{"TGL PCH", 0xa0a1},
-		{"TGL PCH", 0xa0a2},
-		{"TGL PCH", 0xa0a3},
-		{"TGL PCH", 0xa0a4},
-		{"TGL PCH", 0xa0a5},
-		{"TGL PCH", 0xa0a6},
-		{"TGL PCH", 0xa0a7},
 		{0}
 	},
 	.global_pins = (struct pin[]) {

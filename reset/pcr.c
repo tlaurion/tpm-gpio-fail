@@ -148,8 +148,6 @@ void pcr_init(struct pci_dev *const sb)
 	case PCI_DEVICE_ID_INTEL_C256:
 	case PCI_DEVICE_ID_INTEL_W580:
 	case 0x0281: case 0x0283: case 0x0286: /* CML-U/Y (remaining; 0x0284/0x0285 below) */
-	case 0x7e00: case 0x7e01: case 0x7e02: case 0x7e03:
-	case 0x7e04: case 0x7e05: case 0x7e06: case 0x7e07: /* MTL */
 	case PCI_DEVICE_ID_INTEL_CANNONPOINT_LP_U_PREM:
 	case 0x9d85: case 0x9d86: case 0x9d87: case 0x9d88:
 	case 0x9d89: case 0x9d8a: case 0x9d8b: case 0x9d8c:
@@ -165,8 +163,6 @@ void pcr_init(struct pci_dev *const sb)
 	case PCI_DEVICE_ID_INTEL_TIGERPOINT_Y_PREM:
 	case 0xa088: case 0xa089: case 0xa08a: case 0xa08b:
 	case 0xa08c: case 0xa08d: case 0xa08e: case 0xa08f: /* TGL U/Y missing */
-	case 0xa0a0: case 0xa0a1: case 0xa0a2: case 0xa0a3:
-	case 0xa0a4: case 0xa0a5: case 0xa0a6: case 0xa0a7: /* TGL U/Y missing */
 	case PCI_DEVICE_ID_INTEL_ADL_P:
 	case PCI_DEVICE_ID_INTEL_ADL_M:
 	case 0x5180: case 0x5181: case 0x5183: case 0x5184:
@@ -185,6 +181,10 @@ void pcr_init(struct pci_dev *const sb)
 	case 0x4b04: case 0x4b05: case 0x4b06: case 0x4b07: /* EHL other SKUs */
 	case PCI_DEVICE_ID_INTEL_JSL:
 	case PCI_DEVICE_ID_INTEL_EBG:
+	case 0x0684: case 0x0685: case 0x0686: case 0x0687:
+	case 0x0688: case 0x0689: case 0x068a: case 0x068b:
+	case 0x068c: case 0x068d: case 0x068e: case 0x068f:
+	case 0x0697: /* CML-DT/H (desktop, 0xfd000000) */
 		sbbar_phys = 0xfd000000;
 		use_p2sb = false;
 		break;
@@ -215,16 +215,14 @@ void pcr_init(struct pci_dev *const sb)
 	case 0x7e24: case 0x7e25: case 0x7e26: case 0x7e27:
 	case 0x7e28: case 0x7e29: case 0x7e2a: case 0x7e2b:
 	case 0x7e2c: case 0x7e2d: case 0x7e2e: case 0x7e2f: /* ARL-S */
-	case 0x0684: case 0x0685: case 0x0686: case 0x0687:
-	case 0x0688: case 0x0689: case 0x068a: case 0x068b:
-	case 0x068c: case 0x068d: case 0x068e: case 0x068f:
-	case 0x0697: /* CML-DT/H (desktop, 0xe0000000 not 0xfd000000) */
+	case 0x7e00: case 0x7e01: case 0x7e02: case 0x7e03:
+	case 0x7e04: case 0x7e05: case 0x7e06: case 0x7e07: /* MTL (0xe0000000, not 0xfd000000) */
 		sbbar_phys = 0xe0000000;
 		use_p2sb = false;
 		break;
 	default:
 		fprintf(stderr, "Unknown LPC device ID %04x -- not in pcr.c database.\nReport at https://github.com/tlaurion/tpm-gpio-fail/issues\n", sb->device_id);
-		exit(1);
+		exit(126);
 	}
 
 	if (use_p2sb) {

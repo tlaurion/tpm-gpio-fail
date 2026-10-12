@@ -47,7 +47,8 @@ struct platform platform_cfl_s_h = {
 	.tier = 2,
 	.summary = "CFL S/H: Cannonlake GPIO arch, untested",
 	.pad_cfg_base = 0x600,
-	.pad_stride = 16
+	.pad_stride = 16,
+	.dw0_offset = 0x860  /* GPP_B13: community-relative pad 38, 0x600 + 38*16 */
 };
 
 // FIXME: add Coffee Lake (and Amber Lake) LP

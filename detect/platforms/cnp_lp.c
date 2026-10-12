@@ -2,8 +2,9 @@
 //
 // Cannon Point LP (CNP-LP) -- Kaby Lake-R / Whiskey Lake (300-series)
 // GPP_B13 (COMM_0, local idx 38) port=0x6e PAD_CFG_BASE=0x600
-// NOTE: No PADCFGLOCK register exists on CNP-LP proper.
-// _get_lock_base returns 0x80 but the register read returns 0x0 / is absent.
+// PADCFGLOCK exists (the earlier "absent on CNP-LP" note was wrong):
+// base 0x80 + group*8 (CFG/TX pair), bit = pad index within group,
+// per cb src/soc/intel/cannonlake/gpio.c. GPP_B13 (group 1) -> 0x88:13.
 // Device IDs: 0x9d84-0x9d8f
 // UNTESTED: kukri's PoC does not support this PCH family.
 // Supports both LPC and eSPI.
@@ -28,7 +29,7 @@ struct platform platform_cnp_lp = {
 		{0}
 	},
 	.global_pins = (struct pin[]) {
-		{ "GPP_B13", "PLTRST#",    0x6e, 0x88, 1<<6 },
+		{ "GPP_B13", "PLTRST#",    0x6e, 0x88, 1<<13 },
 		{0}
 	},
 	.espi_check_port = 0xc7,
@@ -56,7 +57,8 @@ struct platform platform_cnp_lp = {
 		{0}
 	},
 	.tier = 2,
-	.summary = "CNP-LP: PADCFGLOCK absent per Intel 834810, untested",
+	.summary = "CNP-LP: Cannonlake GPIO arch, untested",
 	.pad_cfg_base = 0x600,
-	.pad_stride = 16
+	.pad_stride = 16,
+	.dw0_offset = 0x860  /* GPP_B13: community-relative pad 38, 0x600 + 38*16 */
 };
