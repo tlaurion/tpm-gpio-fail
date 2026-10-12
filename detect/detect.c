@@ -240,7 +240,10 @@ int main(void)
 		}
 	}
 	if (!platform) {
-		fprintf(stderr, "Unknown ISA bridge device %04x -- not in platform database\n", isa_device);
+		if (isa_device == 0x2918 || isa_device == 0x7010)
+			fprintf(stderr, "ISA bridge 0x%04x is a QEMU emulated LPC bridge (ICH9/PIIX4) -- emulated platform, no physical Intel PCH\n", isa_device);
+		else
+			fprintf(stderr, "Unknown ISA bridge device %04x -- not in platform database\n", isa_device);
 		pci_cleanup(pacc);
 		printf("\n=== RESULT: unknown platform ===\n");
 		return 126;

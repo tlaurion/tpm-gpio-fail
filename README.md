@@ -46,6 +46,10 @@ only, 0xAF:0xD4 bit 13; 1 = host owns the pad, 0 = SMM keeps ownership
 and host writes are gated) and the `DW0 domain` (bits 31:30:
 0=RSMRST/PWROK, 1=DEEP, 2=PLTRST, 3=unmapped/GLBRST).
 
+On emulated boards (QEMU i440fx `0x7010` / Q35 `0x2918` LPC bridges)
+both tools name the emulated chipset and exit 126 -- expected, not an
+error to report.
+
 ## Verifying a firmware fix (two-ROM A/B)
 
 The same pinned tool verifies that a coreboot-side PLTRST pad-lock fix
