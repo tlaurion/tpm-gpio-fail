@@ -132,6 +132,18 @@ static int scan_platform(struct platform *platform)
 		printf("\n--- Pad Configuration ---\n");
 		printf("DW0 (0x%04x) = 0x%08x, mode: %s (bits 13:10=0x%x)\n",
 		       dw0_offs, dw0, mode_str, pad_mode);
+		printf("DW0 domain = %s (bits 31:30 = %u)\n",
+		       ((dw0 >> 30) & 3) == 1 ? "DEEP" :
+		       ((dw0 >> 30) & 3) == 2 ? "PLTRST" :
+		       ((dw0 >> 30) & 3) == 3 ? "unmapped/GLBRST" : "RSMRST/PWROK",
+		       (unsigned)((dw0 >> 30) & 3));
+		/* HOST_OWN for GPP_B13 (SKL/KBL community 0, group 1): 1 = host owns
+		 * the pad (reconfigurable), 0 = SMM keeps ownership (host writes gated) */
+		if (platform->global_pins->port == 0xaf) {
+			uint32_t host_own = pcr_read32(0xaf, 0xd4);
+			printf("HOST_OWN (0xAF:0xD4 bit 13, GPP_B13) = %d\n",
+			       !!(host_own & (1u << 13)));
+		}
 		if (pad_mode == 1)
 			printf("NF1 mode -- mode transition CAN create PLTRST# reset edge\n");
 		else if (pad_mode == 0)
