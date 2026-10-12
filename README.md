@@ -7,9 +7,12 @@ The `detect` tool is extended from kukri's `detect/detect.c`. The `assert` tool
 is based on kukri's modified coreboot `reset/inteltool.c`. The top-level Makefile
 builds them as `tpm-gpio-detect` and `tpm-gpio-assert` for Heads recovery shell.
 
-`tpm-gpio-assert` calls `tpm2 shutdown -c` before assertion and `tpm2 startup -c`
-after, following kukri's documented procedure. PCR values are shown before and
-after assertion.
+On TPM2 hosts, `tpm-gpio-assert` calls `tpm2 shutdown -c` before assertion and
+`tpm2 startup -c` after, following kukri's documented procedure. On TPM1.2
+hosts it reads PCRs 0-15 via `tpm pcrread -ix` and re-initializes the chip
+with a raw `TPM_Startup(TPM_FULL)` on /dev/tpm0 after the pulse. PCR values
+are shown before and after assertion either way; the generation is picked
+from which TPM CLI the initrd packed (`/bin/tpm2` vs `/bin/tpm`).
 
 Built for Heads by `modules/tpm-gpio-reset`. Uses libpci, /dev/mem for PCR access.
 

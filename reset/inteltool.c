@@ -44,6 +44,84 @@ void unmap_physical(void *virt_addr, size_t len)
 }
 #endif
 
+/* Heads initrds pack exactly one TPM CLI generation: modules/tpmtotp
+ * ships /bin/tpm (tpm-tools mega-binary, TPM1.2) when CONFIG_TPM2_TOOLS
+ * is unset, modules/tpm2-tools ships /bin/tpm2 when it is set.  The
+ * present binary therefore identifies the generation, so one assert
+ * binary serves TPM1.2 hosts (e.g. ThinkCentre M900) and TPM2 alike. */
+static int tpm_generation(void)
+{
+	if (access("/bin/tpm2", X_OK) == 0)
+		return 2;
+	if (access("/bin/tpm", X_OK) == 0)
+		return 1;
+	return 0;
+}
+
+/* Show PCR state.  TPM2: tpm2-tools sha256 block (PCRs 0-23).
+ * TPM1: tpm-tools pcrread takes one index and prints a bare SHA1
+ * digest (40 hex digits); TPM1.2 has PCRs 0-15. */
+static void tpm_pcr_readout(int gen)
+{
+	int i;
+	char cmd[48];
+
+	if (gen == 2) {
+		system("tpm2 pcrread 2>/dev/null | grep -A24 'sha256:' "
+		       "|| echo '  (TPM not accessible)'");
+	} else if (gen == 1) {
+		for (i = 0; i < 16; i++) {
+			snprintf(cmd, sizeof(cmd),
+				 "tpm pcrread -ix %d 2>/dev/null", i);
+			printf("  pcr %2d: ", i);
+			if (system(cmd) != 0)
+				printf("(read failed)\n");
+		}
+	} else {
+		printf("(TPM not accessible)\n");
+	}
+}
+
+/* Issue TPM_Startup(TPM_FULL) to a TPM1.2 chip via /dev/tpm0.
+ * The kernel TIS driver does not re-issue Startup after a mid-run TPM
+ * reset, and the packed tpm-tools binary has no startup subcommand, so
+ * send it raw.  Encoding mirrors the kernel's own tpm1_startup()
+ * (drivers/char/tpm/tpm1-cmd.c): tag 0x00c1 (TPM_TAG_RQU_COMMAND),
+ * len 12, ordinal 153 (TPM_ORD_STARTUP), param 1 (TPM_ST_CLEAR,
+ * i.e. TPM_FULL).  Success reply: 00c1 000a 00000000. */
+static void tpm1_startup(void)
+{
+	const uint8_t cmd[] = {
+		0x00, 0xc1, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x99,
+		0x00, 0x01,
+	};
+	uint8_t resp[16];
+	int fd;
+	ssize_t n;
+
+	fd = open("/dev/tpm0", O_RDWR);
+	if (fd < 0) {
+		printf("Can not open /dev/tpm0: %s\n", strerror(errno));
+		return;
+	}
+	if (write(fd, cmd, sizeof(cmd)) != (ssize_t) sizeof(cmd)) {
+		printf("TPM1 Startup write failed: %s\n", strerror(errno));
+		close(fd);
+		return;
+	}
+	n = read(fd, resp, sizeof(resp));
+	close(fd);
+	if (n < 10) {
+		printf("TPM1 Startup: short response (%zd bytes)\n", n);
+		return;
+	}
+	if (resp[6] || resp[7] || resp[8] || resp[9])
+		printf("TPM1 Startup rejected (rc=0x%02x%02x%02x%02x)\n",
+		       resp[6], resp[7], resp[8], resp[9]);
+	else
+		printf("TPM1 Startup (TPM_FULL) accepted\n");
+}
+
 int main(int argc, char *argv[])
 {
 	setbuf(stdout, NULL);
@@ -368,15 +446,25 @@ int main(int argc, char *argv[])
 		}
 
 		/* Read PCRs before assertion */
+		int gen = tpm_generation();
+
 		printf("\n--- PCR State Before Assertion ---\n");
 		fflush(stdout);
-		system("tpm2 startup -c 2>/dev/null; tpm2 pcrread 2>/dev/null | grep -A24 'sha256:' || echo '  (TPM not accessible)'");
+		if (gen == 2) {
+			system("tpm2 startup -c 2>/dev/null; tpm2 pcrread 2>/dev/null | grep -A24 'sha256:' || echo '  (TPM not accessible)'");
+		} else {
+			tpm_pcr_readout(gen);
+		}
 
 		/* Cleanly shut down TPM session before assertion (kukri procedure) */
 		printf("\n--- TPM Session Preparation ---\n");
-		printf("Running tpm2 shutdown -c to cleanly shut down TPM session\n");
-		fflush(stdout);
-		system("tpm2 shutdown -c 2>/dev/null");
+		if (gen == 2) {
+			printf("Running tpm2 shutdown -c to cleanly shut down TPM session\n");
+			fflush(stdout);
+			system("tpm2 shutdown -c 2>/dev/null");
+		} else if (gen == 1) {
+			printf("TPM 1.2: no shutdown command -- the PLTRST# pulse performs a full _TPM_Init (PCRs zero, NVRAM preserved)\n");
+		}
 
 		printf("\n*** WARNING: About to assert PLTRST# -- TPM may reboot (PCRs clear, NVRAM preserved) ***\n");
 		sleep(2);
@@ -454,14 +542,24 @@ int main(int argc, char *argv[])
 		printf("Registers restored\n");
 
 		/* Reinitialize TPM after reset (kukri procedure) */
-		printf("Running tpm2 startup -c to reinitialize TPM\n");
-		fflush(stdout);
-		system("tpm2 startup -c 2>/dev/null");
+		if (gen == 2) {
+			printf("Running tpm2 startup -c to reinitialize TPM\n");
+			fflush(stdout);
+			system("tpm2 startup -c 2>/dev/null");
+		} else if (gen == 1) {
+			printf("Running TPM1 Startup (TPM_FULL) via /dev/tpm0 to reinitialize TPM\n");
+			fflush(stdout);
+			tpm1_startup();
+		}
 
 		/* Read PCRs after assertion */
 		printf("\n--- PCR State After Assertion ---\n");
 		fflush(stdout);
-		system("tpm2 startup -c 2>/dev/null; tpm2 pcrread 2>/dev/null | grep -A24 'sha256:' || echo '  (TPM not accessible)'");
+		if (gen == 2) {
+			system("tpm2 startup -c 2>/dev/null; tpm2 pcrread 2>/dev/null | grep -A24 'sha256:' || echo '  (TPM not accessible)'");
+		} else {
+			tpm_pcr_readout(gen);
+		}
 
 		exit_code = dw0_ok ? 0 : 1;
 	}
