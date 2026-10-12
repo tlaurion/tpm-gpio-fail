@@ -387,6 +387,22 @@ int main(int argc, char *argv[])
 		printf("PCR port=0x%x offset=0x%x\n", port, offset);
 		printf("DW0 (original) = 0x%08x  DW1 (original) = 0x%08x\n", dw0, dw1);
 
+		/* DW0 domain (bits 31:30): which reset domain the pad is wired to */
+		{
+			const uint32_t dom = (dw0 >> 30) & 3;
+			const char *domain = dom == 1 ? "DEEP" :
+				dom == 2 ? "PLTRST" :
+				dom == 3 ? "unmapped/GLBRST" : "RSMRST/PWROK";
+			printf("DW0 domain = %s (bits 31:30 = %u)\n", domain, (unsigned)dom);
+		}
+		/* HOST_OWN for GPP_B13 (SKL/KBL community 0, group 1): 1 = host owns
+		 * the pad (reconfigurable), 0 = SMM keeps ownership (host writes gated) */
+		if (port == 0xaf) {
+			uint32_t host_own = read_pcr32(0xaf, 0xd4);
+			printf("HOST_OWN (0xAF:0xD4 bit 13, GPP_B13) = %d\n",
+			       !!(host_own & (1u << 13)));
+		}
+
 		/* Check pad mode: NF1->GPIO transition creates the reset edge */
 		uint32_t pad_mode = (dw0 >> 10) & 0xf;
 		const char *mode_name = pad_mode == 0 ? "GPIO" :

@@ -221,7 +221,10 @@ void pcr_init(struct pci_dev *const sb)
 		use_p2sb = false;
 		break;
 	default:
-		fprintf(stderr, "Unknown LPC device ID %04x -- not in pcr.c database.\nReport at https://github.com/tlaurion/tpm-gpio-fail/issues\n", sb->device_id);
+		if (sb->device_id == 0x2918 || sb->device_id == 0x7010)
+			fprintf(stderr, "LPC device 0x%04x is a QEMU emulated LPC bridge (ICH9/PIIX4) -- emulated platform, no physical Intel PCH\n", sb->device_id);
+		else
+			fprintf(stderr, "Unknown LPC device ID %04x -- not in pcr.c database.\nReport at https://github.com/tlaurion/tpm-gpio-fail/issues\n", sb->device_id);
 		exit(126);
 	}
 
