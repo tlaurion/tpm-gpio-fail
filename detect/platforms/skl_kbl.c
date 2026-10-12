@@ -32,7 +32,8 @@ struct platform platform_skl_kbl_s_h = {
 		{0}
 	},
 	.global_pins = (struct pin[]) {
-		{ "GPP_B13", "PLTRST#",    0xaf, 0xb0, 1<<5 },
+		/* PLTRST# = GPP_B13; S/H lock 0x98 (not 0xb0 = GPP_C's lock), bit 13 */
+		{ "GPP_B13", "PLTRST#",    0xaf, 0x98, 1<<13 },
 		{0}
 	},
 	.espi_check_port = 0xc7,
@@ -62,7 +63,8 @@ struct platform platform_skl_kbl_s_h = {
 	.tier = 1,
 	.summary = "SKL/KBL S/H: confirmed vulnerable by kukri",
 	.pad_cfg_base = 0x400,
-	.pad_stride = 8
+	.pad_stride = 8,
+	.dw0_offset = 0x528  /* PLTRST#: live-verified on T480; auto-derive (base + ctz(bit)*stride) is wrong for SKL */
 };
 
 struct platform platform_skl_kbl_lp = {
@@ -80,7 +82,8 @@ struct platform platform_skl_kbl_lp = {
 		{0}
 	},
 	.global_pins = (struct pin[]) {
-		{ "GPP_B13", "PLTRST#",    0xaf, 0xb0, 1<<5 },
+		/* PLTRST# = GPP_B13; LP lock 0xa8 (not 0xb0 = GPP_C's lock), bit 13 */
+		{ "GPP_B13", "PLTRST#",    0xaf, 0xa8, 1<<13 },
 		{0}
 	},
 	.espi_check_port = 0xc7,
@@ -110,5 +113,6 @@ struct platform platform_skl_kbl_lp = {
 	.tier = 2,
 	.summary = "SKL/KBL LP: same GPIO arch as confirmed S/H, untested",
 	.pad_cfg_base = 0x400,
-	.pad_stride = 8
+	.pad_stride = 8,
+	.dw0_offset = 0x528  /* PLTRST#: live-verified on T480 (PCH 0x9d4e); auto-derive is wrong for SKL */
 };

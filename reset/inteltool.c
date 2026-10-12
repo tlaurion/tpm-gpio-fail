@@ -138,8 +138,8 @@ int main(int argc, char *argv[])
 		known_pch = 1;
 		port = 0xaf;
 		offset = 0x528;
-		lock_offset = 0xb0;
-		lock_bit = 1 << 5;
+		lock_offset = 0x98; /* PLTRST# = GPP_B13 (0xb0 was GPP_C's lock) */
+		lock_bit = 1 << 13;
 		break;
 
 	case PCI_DEVICE_ID_INTEL_H270:
@@ -154,8 +154,8 @@ int main(int argc, char *argv[])
 		known_pch = 1;
 		port = 0xaf;
 		offset = 0x528;
-		lock_offset = 0xb0;
-		lock_bit = 1 << 5;
+		lock_offset = 0xa8; /* PLTRST# = GPP_B13 (0xb0 was GPP_C's lock) */
+		lock_bit = 1 << 13;
 		break;
 
 	case PCI_DEVICE_ID_INTEL_H610:
@@ -201,8 +201,8 @@ int main(int argc, char *argv[])
 			known_pch = 1;
 			port = 0xaf;
 			offset = 0x528;
-			lock_offset = 0xb0;
-			lock_bit = 1 << 5;
+			lock_offset = 0xa8; /* PLTRST# = GPP_B13 (0xb0 was GPP_C's lock) */
+			lock_bit = 1 << 13;
 		} else if ((sb->device_id & 0xfff0) == 0x5180) {
 			printf("Found Alder Point P\n");
 			known_pch = 1;
@@ -230,7 +230,7 @@ int main(int argc, char *argv[])
 			printf("Found Coffee Lake PCH\n");
 			known_pch = 1;
 			port = 0x6e;
-			offset = 0x6d0;
+			offset = 0x860;  /* GPP_B13: community-relative pad 38, 0x600 + 38*16 */
 			lock_offset = 0x88;
 			lock_bit = 1 << 13;
 		} else if (((sb->device_id & 0xfff0) == 0x0680
@@ -260,16 +260,9 @@ int main(int argc, char *argv[])
 			port = 0x6e;
 			offset = 0x860;
 			lock_offset = 0x88;
-			lock_bit = 1 << 6;
+			lock_bit = 1 << 13;
 		} else if ((sb->device_id & 0xfff0) == 0xa080
 			   && sb->device_id >= 0xa082) {
-			printf("Found Tiger Lake PCH\n");
-			known_pch = 1;
-			port = 0x6e;
-			offset = 0x7d0;
-			lock_offset = 0x80;
-			lock_bit = 1 << 13;
-		} else if ((sb->device_id & 0xfff8) == 0xa0a0) {
 			printf("Found Tiger Lake PCH\n");
 			known_pch = 1;
 			port = 0x6e;
@@ -317,20 +310,19 @@ int main(int argc, char *argv[])
 			lock_bit = 1 << 13;
 		} else if (sb->device_id == 0x31e8 || sb->device_id == 0x3197) {
 			/* Gemini Lake: GPIO_98 = PMU_PLTRST_N, community NORTH (PID_GPIO_N=0xC5).
-			 * GPIO_98 = N_OFFSET(80) + 22 = community-relative pad 22.
+			 * GPIO_98 = N_OFFSET + 22 = community-relative pad 22 (NORTH group 0).
 			 * DW0 offset = PAD_CFG_BASE(0x600) + 22*16 = 0x760.
-			 * NO PADCFGLOCK register on GLK/APL -- pad is always writable.
-			 * Confirmed: coreboot apollolake gpio_glk.c has no pad_cfg_lock_offset
-			 * and SOC_INTEL_COMMON_BLOCK_SMM_LOCK_GPIO_PADS is not selected.
+			 * PADCFGLOCK exists (the earlier "no PADCFGLOCK on GLK" note was
+			 * wrong): gpio_glk.c sets pad_cfg_lock_offset = 0x80, so the
+			 * PLTRST# lock is 0x80 bit 22.
 			 * SBREG_BAR = 0xD0000000 (apollolake/Kconfig). */
-			printf("Found Gemini Lake PCH (%s) -- no PADCFGLOCK register\n",
+			printf("Found Gemini Lake PCH (%s)\n",
 			       sb->device_id == 0x31e8 ? "LPC" : "eSPI");
 			known_pch = 1;
-			no_padcfglock = 1;
 			port = 0xc5;
 			offset = 0x760;
-			lock_offset = 0;
-			lock_bit = 1;
+			lock_offset = 0x80;
+			lock_bit = 1 << 22;
 		} else {
 			printf("Unknown PCH device ID %04x\n", sb->device_id);
 		}

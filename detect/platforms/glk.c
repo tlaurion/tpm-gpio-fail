@@ -22,12 +22,13 @@
 //   DW0 offset = PAD_CFG_BASE + 22 * 16 = 0x600 + 352 = 0x760
 //   Confirmed on: protectli/vault_glk/gpio.h, intel/glkrvp and google/octopus
 //
-// NO PADCFGLOCK on GLK/APL:
-//   The GLK GPIO community struct in gpio_glk.c does NOT set pad_cfg_lock_offset,
-//   and SOC_INTEL_COMMON_BLOCK_SMM_LOCK_GPIO_PADS is not selected in Kconfig.
-//   Therefore PADCFGLOCK registers do NOT exist on this platform -- the PLTRST#
-//   pad can always be reconfigured by software. This makes GLK unconditionally
-//   vulnerable (no firmware mitigation is architecturally possible via pad lock).
+// PADCFGLOCK on GLK (the earlier "no PADCFGLOCK on GLK/APL" note was wrong):
+//   gpio_glk.c sets pad_cfg_lock_offset = PAD_CFG_LOCK (0x80) for every
+//   community. Per-group layout (common/block/gpio/gpio.c):
+//     lock = 0x80 + group*8 (CFG/TX pair), bit = pad index within group.
+//   GPIO_98 = N_OFFSET + 22 (gpio_glk.h) -> NORTH group 0 -> lock 0x80 bit 22.
+//   LPC/eSPI pins GPIO_147-155 = N_OFFSET + 71-79 -> NORTH group 2 ->
+//   lock 0x90, bits 7-15.
 //
 // LPC/eSPI pins -- GPIO_147-155 (NORTH community, NF1=LPC, NF2=eSPI):
 //   GPIO_147 = N_OFFSET+71 = 151  LPC_SERIRQ / ESPI_IO0   (NF1/NF2)
@@ -58,8 +59,8 @@ struct platform platform_glk = {
 		{0}
 	},
 	.global_pins = (struct pin[]) {
-		/* lock_offset/lock_bit unused: no_padcfglock=1; dw0_offset set explicitly */
-		{ "GPIO_98", "PLTRST#", 0xc5, 0, 1 },
+		/* GPIO_98 = N_OFFSET+22: NORTH group 0 -> lock 0x80, bit 22 */
+		{ "GPIO_98", "PLTRST#", 0xc5, 0x80, 1<<22 },
 		{0}
 	},
 	/* espi_check_bit=0: 0x31e8 is always LPC; 0x3197 has lpc_pins=NULL */
@@ -67,31 +68,31 @@ struct platform platform_glk = {
 	.espi_check_offset = 0,
 	.espi_check_bit = 0,
 	.lpc_pins = (struct pin[]) {
-		{"GPIO_147", "LPC_SERIRQ",  0xc5, 0, 1<<7  },
-		{"GPIO_148", "LPC_CLKOUT0", 0xc5, 0, 1<<8  },
-		{"GPIO_149", "LPC_CLKOUT1", 0xc5, 0, 1<<9  },
-		{"GPIO_150", "LPC_AD0",     0xc5, 0, 1<<10 },
-		{"GPIO_151", "LPC_AD1",     0xc5, 0, 1<<11 },
-		{"GPIO_152", "LPC_AD2",     0xc5, 0, 1<<12 },
-		{"GPIO_153", "LPC_AD3",     0xc5, 0, 1<<13 },
-		{"GPIO_154", "LPC_CLKRUN#", 0xc5, 0, 1<<14 },
-		{"GPIO_155", "LPC_FRAME#",  0xc5, 0, 1<<15 },
+		/* GPIO_147-155 = N_OFFSET+71-79: NORTH group 2 -> lock 0x90, bits 7-15 */
+		{"GPIO_147", "LPC_SERIRQ",  0xc5, 0x90, 1<<7  },
+		{"GPIO_148", "LPC_CLKOUT0", 0xc5, 0x90, 1<<8  },
+		{"GPIO_149", "LPC_CLKOUT1", 0xc5, 0x90, 1<<9  },
+		{"GPIO_150", "LPC_AD0",     0xc5, 0x90, 1<<10 },
+		{"GPIO_151", "LPC_AD1",     0xc5, 0x90, 1<<11 },
+		{"GPIO_152", "LPC_AD2",     0xc5, 0x90, 1<<12 },
+		{"GPIO_153", "LPC_AD3",     0xc5, 0x90, 1<<13 },
+		{"GPIO_154", "LPC_CLKRUN#", 0xc5, 0x90, 1<<14 },
+		{"GPIO_155", "LPC_FRAME#",  0xc5, 0x90, 1<<15 },
 		{0}
 	},
 	.espi_pins = (struct pin[]) {
-		{"GPIO_147", "ESPI_IO0",    0xc5, 0, 1<<7  },
-		{"GPIO_148", "ESPI_IO1",    0xc5, 0, 1<<8  },
-		{"GPIO_149", "ESPI_IO2",    0xc5, 0, 1<<9  },
-		{"GPIO_150", "ESPI_IO3",    0xc5, 0, 1<<10 },
-		{"GPIO_151", "ESPI_CS#",    0xc5, 0, 1<<11 },
-		{"GPIO_152", "ESPI_CLK",    0xc5, 0, 1<<12 },
-		{"GPIO_153", "ESPI_RESET#", 0xc5, 0, 1<<13 },
+		{"GPIO_147", "ESPI_IO0",    0xc5, 0x90, 1<<7  },
+		{"GPIO_148", "ESPI_IO1",    0xc5, 0x90, 1<<8  },
+		{"GPIO_149", "ESPI_IO2",    0xc5, 0x90, 1<<9  },
+		{"GPIO_150", "ESPI_IO3",    0xc5, 0x90, 1<<10 },
+		{"GPIO_151", "ESPI_CS#",    0xc5, 0x90, 1<<11 },
+		{"GPIO_152", "ESPI_CLK",    0xc5, 0x90, 1<<12 },
+		{"GPIO_153", "ESPI_RESET#", 0xc5, 0x90, 1<<13 },
 		{0}
 	},
 	.tier = 2,
-	.summary = "GLK: no PADCFGLOCK register exists -- PLTRST# pad is always writable, no firmware mitigation possible",
+	.summary = "GLK: PADCFGLOCK present (0x80/0x90, group-stepped), untested",
 	.pad_cfg_base = 0x600,
 	.pad_stride = 16,
 	.dw0_offset = 0x760,  /* GPIO_98: community-relative pad 22, 0x600 + 22*16 */
-	.no_padcfglock = 1
 };
