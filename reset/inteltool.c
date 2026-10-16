@@ -232,7 +232,7 @@ int main(int argc, char *argv[])
 		known_pch = 1;
 		port = 0xaf;
 		offset = 0x528;
-		lock_offset = 0xa8; /* PLTRST# = GPP_B13 (0xb0 was GPP_C's lock) */
+		lock_offset = 0x98; /* PLTRST# = GPP_B13; PCH-H base 0x90 (was 0xa8) */
 		lock_bit = 1 << 13;
 		break;
 
