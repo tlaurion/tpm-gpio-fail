@@ -86,14 +86,14 @@ static void tpm_pcr_readout(int gen)
  * The kernel TIS driver does not re-issue Startup after a mid-run TPM
  * reset, and the packed tpm-tools binary has no startup subcommand, so
  * send it raw.  Encoding mirrors the kernel's own tpm1_startup()
- * workaround (drivers/char/tpm/tpm1-cmd.c, v6.1): tag 0x8002
- * (TPM_ST_NO_SESSIONS), len 12, ordinal 153 (TPM_ORD_STARTUP),
- * param 1 (TPM_FULL).  Success reply: 8002 0008 00000000. */
+ * (drivers/char/tpm/tpm1-cmd.c): tag 0x00c1 (TPM_TAG_RQU_COMMAND),
+ * len 12, ordinal 153 (TPM_ORD_STARTUP), param 1 (TPM_ST_CLEAR,
+ * i.e. TPM_FULL).  Success reply: 00c1 000a 00000000. */
 static void tpm1_startup(void)
 {
 	const uint8_t cmd[] = {
-		0x80, 0x02, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x99,
-		0x00, 0x00, 0x00, 0x01,
+		0x00, 0xc1, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x99,
+		0x00, 0x01,
 	};
 	uint8_t resp[16];
 	int fd;
@@ -111,13 +111,13 @@ static void tpm1_startup(void)
 	}
 	n = read(fd, resp, sizeof(resp));
 	close(fd);
-	if (n < 8) {
+	if (n < 10) {
 		printf("TPM1 Startup: short response (%zd bytes)\n", n);
 		return;
 	}
-	if (resp[4] || resp[5] || resp[6] || resp[7])
+	if (resp[6] || resp[7] || resp[8] || resp[9])
 		printf("TPM1 Startup rejected (rc=0x%02x%02x%02x%02x)\n",
-		       resp[4], resp[5], resp[6], resp[7]);
+		       resp[6], resp[7], resp[8], resp[9]);
 	else
 		printf("TPM1 Startup (TPM_FULL) accepted\n");
 }
