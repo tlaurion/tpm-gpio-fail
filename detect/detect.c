@@ -88,7 +88,7 @@ static int detect_pinset(struct pin *pins)
 		uint32_t locktx_val = pcr_read32(pin->port, pin->lock_offset + 4);
 		int cfg_locked = !!(lock_val & pin->lock_bit);
 		int tx_locked = !!(locktx_val & pin->lock_bit);
-		unlocked += !(cfg_locked && tx_locked);
+		unlocked += !cfg_locked;
 
 		char cfg_str[32], tx_str[32];
 		snprintf(cfg_str, sizeof(cfg_str), "0x%08x (%s)", lock_val,
@@ -104,9 +104,10 @@ static int detect_pinset(struct pin *pins)
 	return unlocked;
 }
 
-static int scan_platform(struct platform *platform)
+static int scan_platform(struct platform *platform, int *pltrst_locked_out)
 {
 	int status = 0;
+	int pltrst_locked = -1;
 	if (platform->global_pins) {
 		printf("\n--- PLTRST# Pad Lock Status ---\n");
 		if (platform->no_padcfglock) {
@@ -116,6 +117,7 @@ static int scan_platform(struct platform *platform)
 			printf("  %-10s %-12s %-22s %-22s\n",
 			       "GPIO", "Signal", "PADCFGLOCK", "PADCFGLOCKTX");
 			status = detect_pinset(platform->global_pins);
+			pltrst_locked = (status == 0);
 		}
 	} else {
 		printf("No PLTRST# pad definition for this platform (not affected)\n");
@@ -175,10 +177,14 @@ static int scan_platform(struct platform *platform)
 		printf("No bus pins defined for this platform\n");
 	}
 
-	/* Vulnerability classification */
+	/* Vulnerability classification: key off the PLTRST# pad config lock,
+	 * not the platform ID. A locked pad is mitigated regardless of tier. */
 	printf("\n--- Vulnerability Classification ---\n");
 	if (platform->tier == -1) {
 		printf("NOT VULNERABLE: %s\n", platform->summary);
+	} else if (pltrst_locked) {
+		printf("MITIGATED: PLTRST# pad configuration locked (PADCFGLOCK set)\n");
+		printf("Pad reconfiguration writes are ignored; PLTRST# assertion blocked.\n");
 	} else if (platform->tier == 1) {
 		printf("TIER 1 -- CONFIRMED VULNERABLE: %s\n", platform->summary);
 		printf("Attack confirmed working by community testing.\n");
@@ -192,6 +198,8 @@ static int scan_platform(struct platform *platform)
 		printf("Run tpm-gpio-assert to test.\n");
 	}
 
+	if (pltrst_locked_out)
+		*pltrst_locked_out = pltrst_locked;
 	return status;
 }
 
@@ -323,13 +331,16 @@ int main(void)
 	}
 
 	/* 5. Scan platform (detect pins via PCR) */
-	int err = scan_platform(platform);
+	int pltrst_locked = -1;
+	int err = scan_platform(platform, &pltrst_locked);
 	if (err < 0) {
 		printf("\n=== RESULT: hardware access error ===\n");
 		return 127;
 	}
 
-	printf("\n=== RESULT: %s (unlocked: %d) ===\n",
-	       err == 0 ? "all pins locked" : "unlocked pins found", err);
+	printf("\n=== RESULT: PLTRST# pad %s; %d pin%s unlocked ===\n",
+	       pltrst_locked == 1 ? "LOCKED (mitigated)" :
+	       pltrst_locked == 0 ? "UNLOCKED (vulnerable)" : "not affected",
+	       err, err == 1 ? "" : "s");
 	return err;
 }

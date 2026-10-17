@@ -531,10 +531,9 @@ int main(int argc, char *argv[])
 		int dw1_ok = (dw1_rb == 0x00000000);
 		printf("DW0 (asserted) = 0x%08x  DW1 (asserted) = 0x%08x\n", dw0_rb, dw1_rb);
 		if (!dw0_ok)
-			printf("Pad reconfiguration FAILED (TX=0, mode=GPIO) -- %s\n",
-			       "WRITE IGNORED - pad may be locked");
+			printf("DW0 write ignored -- PADCFGLOCK set, pad configuration locked\n");
 		if (!dw1_ok)
-			printf("DW1 partially locked (TX control bits) - does not prevent reset\n");
+			printf("DW1 TX state unlocked (expected; the config lock gates the pad)\n");
 
 		write_pcr32(port, offset + 0, dw0);
 		write_pcr32(port, offset + 4, dw1);
@@ -568,8 +567,8 @@ int main(int argc, char *argv[])
 		exit_code = 126;
 
 	printf("\n=== RESULT: %s ===\n",
-	       exit_code == 0 ? "DW0 write verified -- compare before/after PCR output for confirmation" :
-	       exit_code == 1 ? "Pad reconfiguration FAILED (DW0 write ignored -- pad locked by firmware)" :
+	       exit_code == 0 ? "DW0 write accepted -- pad reconfiguration possible (vulnerable)" :
+	       exit_code == 1 ? "DW0 write ignored -- PLTRST# pad configuration locked (PADCFGLOCK set): assertion blocked" :
 	       exit_code == 2 ? "not vulnerable (assertion skipped)" :
 	       exit_code == 126 ? "unknown PCH" :
 	       "hardware access error");
