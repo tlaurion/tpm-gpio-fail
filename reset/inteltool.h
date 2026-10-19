@@ -313,6 +313,8 @@ static inline uint32_t inl(unsigned port)
 #define PCI_DEVICE_ID_INTEL_ADL_P		0x5182
 #define PCI_DEVICE_ID_INTEL_ADL_M		0x5187
 #define PCI_DEVICE_ID_INTEL_RPL_P		0x519d
+#define PCI_DEVICE_ID_INTEL_ADL_N               0x5481
+#define PCI_DEVICE_ID_INTEL_ADL_N_2             0x5482
 
 #define PCI_DEVICE_ID_INTEL_EHL			0x4b00
 #define PCI_DEVICE_ID_INTEL_JSL			0x4d87
@@ -337,6 +339,7 @@ static inline uint32_t inl(unsigned port)
 #define PCI_DEVICE_ID_INTEL_APL_LPC		0x5ae8
 #define PCI_DEVICE_ID_INTEL_DNV_LPC		0x19dc
 #define PCI_DEVICE_ID_INTEL_GLK_LPC		0x31E8
+#define PCI_DEVICE_ID_INTEL_GLK_ESPI		0x3197
 
 /* Intel starts counting these generations with the integration of the DRAM controller */
 #define PCI_DEVICE_ID_INTEL_CORE_0TH_GEN	0xd132 /* Nehalem */

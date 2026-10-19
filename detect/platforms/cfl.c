@@ -20,6 +20,9 @@ struct platform platform_cfl_s_h = {
 		{ "GPP_B13", "PLTRST#",    0x6e, 0x88, 1<<13 },
 		{0}
 	},
+	.espi_check_port = 0xc7,
+	.espi_check_offset = 0x3418,
+	.espi_check_bit = 1<<1,
 	.lpc_pins = (struct pin[]) {
 		{"GPP_A1",  "LAD0",        0x6e, 0x80, 1<<1  },
 		{"GPP_A2",  "LAD1",        0x6e, 0x80, 1<<2  },
@@ -40,7 +43,12 @@ struct platform platform_cfl_s_h = {
 		{"GPP_A9",  "ESPI_CLK",    0x6e, 0x80, 1<<9  },
 		{"GPP_A14", "ESPI_RESET#", 0x6e, 0x80, 1<<14 },
 		{0}
-	}
+	},
+	.tier = 2,
+	.summary = "CFL S/H: Cannonlake GPIO arch, untested",
+	.pad_cfg_base = 0x600,
+	.pad_stride = 16,
+	.dw0_offset = 0x860  /* GPP_B13: community-relative pad 38, 0x600 + 38*16 */
 };
 
 // FIXME: add Coffee Lake (and Amber Lake) LP
