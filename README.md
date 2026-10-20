@@ -29,6 +29,7 @@ PLTRST# = community-relative pad index 13, bit position `1<<13`.
 | ADL-S | 0x6d | 0x110 | 1<<13 | Intel doc 834810 Table 3 |
 | RPL-P | 0x6e | 0x80 | 1<<13 | same arch as ADL-P |
 | RPL-S | 0x6d | 0x110 | 1<<13 | Intel doc 834810 Table 3 |
+| Arrow Lake S | 0x6d | 0x120 | 1<<13 | inteltool.c (datasheet unverified) |
 | CFL | 0x6e | 0x88 | 1<<13 | kukri 21c394e |
 | CML-U/Y | 0x6e | 0x88 | 1<<13 | Intel doc 834810 Table 2 |
 | CML-DT/H | 0x6e | 0x88 | 1<<13 | Intel doc 834810 Table 3 |
@@ -39,25 +40,45 @@ PLTRST# = community-relative pad index 13, bit position `1<<13`.
 | MTL | not vulnerable | - | - | functional GPIO lock |
 | Pre-SKL | not vulnerable | - | - | dedicated PLTRST# pin |
 
-LPC/eSPI pins (GPP_A1–A9) use lock_offset 0xa0 on SKL/KBL, 0x80 on CML/CFL/CNP,
-0x90 on ADL-S/RPL-S — i.e. lock_offset = base + 1*8 where base is the GPP_A
-group-0 lock register.
+Reference: Intel doc 834810 = "General Purpose I/O Configuration Best Practices",
+ID 834810 (public): https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/technical-documentation/gpio-configuration-best-practices.html
+
+LPC/eSPI pin lock offsets from `detect/platforms/*.c` espi pin tables:
+SKL/KBL 0xa0 (port 0xaf); ADL-P/N, CFL, CML-U/Y &amp; CML-DT/H, CNP-LP, TGL
+0x80 (port 0x6e); ADL-S/RPL-S 0x110 (port 0x6d); EHL 0x90 (port 0x6b);
+JSL 0x98 (port 0x6e); GLK 0x90 (port 0xc5). No single group-0 base + 8
+formula holds across families.
 
 ## Usage (Heads recovery shell)
 
+### Pre-test (un-locked firmware ROM)
+
 ```bash
-# Mount USB thumb drive read+write
-mount-usb.sh --mode rw
-
-# Audit (safe, read-only)
-tpm-gpio-detect 2>&1 | tee /media/tpm-gpio-detect.log
-
-# Execute
-tpm-gpio-assert 2>&1 | tee /media/tpm-gpio-assert.log
-
-# Unmount usb thumb drive
-umount /media
+mount-usb.sh --mode rw && tpm-gpio-detect 2>&1 | tee /media/pre-detect.log ; umount /media
+mount-usb.sh --mode rw && tpm-gpio-assert 2>&1 | tee /media/pre-assert.log ; umount /media
+mount-usb.sh --mode rw && ( echo "---- BEFORE ----" && $CONFIG_FLASH_OPTIONS 2>&1 ) | tee /media/pre-lock.log ; umount /media
+mount-usb.sh --mode rw && cbmem --console 2>&1 | tee /media/pre-cbmem.log ; umount /media
 ```
+
+Rename or move these `pre-*` logs aside, then flash the fixed firmware ROM.
+
+### Post-test (fixed firmware ROM)
+
+```bash
+mount-usb.sh --mode rw && tpm-gpio-detect 2>&1 | tee /media/post-detect.log ; umount /media
+mount-usb.sh --mode rw && tpm-gpio-assert 2>&1 | tee /media/post-assert.log ; umount /media
+mount-usb.sh --mode rw && ( echo "---- BEFORE ----" && $CONFIG_FLASH_OPTIONS 2>&1 ) | tee /media/post-lock.log ; umount /media
+mount-usb.sh --mode rw && cbmem --console 2>&1 | tee /media/post-cbmem.log ; umount /media
+```
+
+`tpm-gpio-detect` audits GPIO lock status (read-only).
+`tpm-gpio-assert` attempts to reconfigure PLTRST#; the effect only
+persists until the next platform reboot -- it is not destructive, and
+its result is not meant to survive one.
+`cbmem --console` dumps the coreboot console buffer; on boards whose
+SMM logs pad-lock activity you may see messages such as
+`gpio_lock_smi: SoC GPIO pads locked` there -- advisory only, never a
+pass/fail criterion.
 
 ## Exit codes
 
@@ -77,35 +98,36 @@ and host writes are gated) and the `DW0 domain` (bits 31:30:
 0=RSMRST/PWROK, 1=DEEP, 2=PLTRST, 3=unmapped/GLBRST).
 
 On emulated boards (QEMU i440fx `0x7010` / Q35 `0x2918` LPC bridges)
-both tools name the emulated chipset and exit 126 -- expected, not an
+`detect` names the emulated bridge explicitly and exits 126; `assert`
+reports an unknown PCH device ID and also exits 126 -- expected, not an
 error to report.
 
 ## Verifying a firmware fix (two-ROM A/B)
 
-The same pinned tool verifies that a coreboot-side PLTRST pad-lock fix
-works: pre-test on the un-locked firmware, post-test on the fixed
-firmware, same boards.
+Run the Pre-test Usage commands on the un-locked firmware, rename or
+move the `pre-*` logs aside, flash the fixed firmware ROM, then run
+the Post-test Usage commands and compare against the verdict below.
 
-```bash
-# 1. Boot the UN-LOCKED firmware (pre-test). In the recovery shell:
-mount-usb.sh --mode rw
-tpm-gpio-detect 2>&1 | tee /media/tpm-gpio-detect.log
-flashrom -p internal -r - 2>/dev/null | sha256sum | tee /media/rom-hash.txt
-tpm-gpio-assert 2>&1 | tee /media/tpm-gpio-assert.log   # expect exit 0
-umount /media
+**Verdict** (never the exit code alone):
 
-# 2. Flash the FIXED firmware (pad lock enabled), repeat. Expect exit 1.
-```
+- **Detect**: PADCFGLOCK bits 0 (pre) → set (post)
+- **Assert**: exit 0 (pre, write verified, PCRs cleared) → exit 1 (post, write ignored, pad locked), PCRs unchanged
+- **Lock**: flashprog PR0 unlocked (pre) → locked (post)
+- **cbmem --console**: advisory only; SMM pad-lock messages appear on some boards, not all
 
-Expected: pre-test exit 0 (write verified, PCRs cleared), post-test
-exit 1 (write ignored, pad locked). If the pre-test already exits 1,
-check the HOST_OWN line before blaming the ROM: HOST_OWN = 0 means the
-host does not own the GPIO community, so the pad reconfiguration is
-gated regardless of the pad lock.
+If the pre-test already exits 1, check the HOST_OWN line before blaming
+the ROM: HOST_OWN = 0 means the host does not own the GPIO community, so
+the pad reconfiguration is gated regardless of the pad lock.
 
 ## Tested
 
-NV4x ADL-P (0x5182): pads unlocked, NF1 mode confirmed, PCRs cleared to zero.
+NV4x ADL-P (0x5182): verified per linuxboot/heads PR 2227 — pre-lock ROM
+reports pads unlocked (vulnerable); after the pad-lock SMI,
+`tpm-gpio-detect` reports `GPP_B13 PLTRST# 0x00002000 (LOCKED)`, verdict
+`MITIGATED`, and `tpm-gpio-assert` reports `DW0 write ignored --
+PADCFGLOCK set` with PCRs unchanged; `cbmem --console` shows
+`gpio_lock_smi: SoC GPIO pads locked (1 pad)` (advisory confirmation of
+the lock SMI, not a pass/fail criterion).
 
 All other platform families are untested. Report results at:
 <https://github.com/tlaurion/tpm-gpio-fail/issues>
