@@ -48,7 +48,7 @@ void unmap_physical(void *virt_addr, size_t len)
  * ships /bin/tpm (tpm-tools mega-binary, TPM1.2) when CONFIG_TPM2_TOOLS
  * is unset, modules/tpm2-tools ships /bin/tpm2 when it is set.  The
  * present binary therefore identifies the generation, so one assert
- * binary serves TPM1.2 hosts (e.g. ThinkCentre M900) and TPM2 alike. */
+ * binary serves TPM1.2 hosts and TPM2 alike. */
 static int tpm_generation(void)
 {
 	if (access("/bin/tpm2", X_OK) == 0)
@@ -216,7 +216,10 @@ int main(int argc, char *argv[])
 		known_pch = 1;
 		port = 0xaf;
 		offset = 0x528;
-		lock_offset = 0xa8; /* PLTRST# = GPP_B13 (Intel 332691: GPP_B at A8h) */
+		/* PLTRST# = GPP_B13; PCH-H lock 0x98 = base 0x90 (coreboot gerrit
+		 * 95661, applied fix) + GPP_B group(1)*8; matches Linux
+		 * SPT_H_PADCFGLOCK 0x090 + reg_num*8. PCH-LP uses 0xa8. */
+		lock_offset = 0x98;
 		lock_bit = 1 << 13;
 		break;
 
@@ -232,7 +235,10 @@ int main(int argc, char *argv[])
 		known_pch = 1;
 		port = 0xaf;
 		offset = 0x528;
-		lock_offset = 0xa8; /* PLTRST# = GPP_B13; Intel 335193: GPP_B at A8h */
+		/* PLTRST# = GPP_B13; PCH-H lock 0x98 = base 0x90 (coreboot gerrit
+		 * 95661, applied fix) + GPP_B group(1)*8; matches Linux
+		 * SPT_H_PADCFGLOCK 0x090 + reg_num*8. PCH-LP uses 0xa8. */
+		lock_offset = 0x98;
 		lock_bit = 1 << 13;
 		break;
 
@@ -355,7 +361,7 @@ int main(int argc, char *argv[])
 			lock_offset = 0x120;
 			lock_bit = 1 << 13;
 		} else if ((sb->device_id & 0xfff8) == 0x7e00) {
-			printf("Found Meteor Lake PCH - NOT VULNERABLE to PLTRST# assertion\n");
+			printf("Found Meteor Lake PCH (no PLTRST# pad definition -- untested)\n");
 			known_pch = 1;
 			vulnerable = 0;
 		} else if ((sb->device_id & 0xfff8) == 0x4b00) {
@@ -411,8 +417,8 @@ int main(int argc, char *argv[])
 	int pad_was_in_gpio = 0;
 
 	if (known_pch && !vulnerable) {
-		printf("\nPlatform is NOT VULNERABLE to TPM GPIO reset attack.\n");
-		printf("GPIO pad lock is functional on this PCH -- assertion skipped.\n");
+		printf("\nPlatform is UNTESTED for the TPM GPIO reset attack.\n");
+		printf("No PLTRST# pad definition for this PCH -- vulnerability cannot be confirmed; assertion skipped.\n");
 		exit_code = 2;
 	}
 

@@ -181,7 +181,7 @@ static int scan_platform(struct platform *platform, int *pltrst_locked_out)
 	 * not the platform ID. A locked pad is mitigated regardless of tier. */
 	printf("\n--- Vulnerability Classification ---\n");
 	if (platform->tier == -1) {
-		printf("NOT VULNERABLE: %s\n", platform->summary);
+		printf("UNTESTED (cannot confirm): %s\n", platform->summary);
 	} else if (pltrst_locked) {
 		printf("MITIGATED: PLTRST# pad configuration locked (PADCFGLOCK set)\n");
 		printf("Pad reconfiguration writes are ignored; PLTRST# assertion blocked.\n");
@@ -257,11 +257,13 @@ int main(void)
 		return 126;
 	}
 
-	/* Not-vulnerable platforms (MTL, Pre-SKL) have no GPIO community definitions */
+	/* Platforms with no GPIO community / PLTRST# pad definition (MTL,
+	 * Pre-SKL) cannot be tested; report that honestly rather than
+	 * declaring them immune. */
 	if (!platform->global_pins) {
-		printf("Platform %s is NOT vulnerable by design.\n", platform->name);
+		printf("Platform %s has no PLTRST# pad definition -- vulnerability UNTESTED.\n", platform->name);
 		pci_cleanup(pacc);
-		printf("\n=== RESULT: platform not vulnerable by design ===\n");
+		printf("\n=== RESULT: platform untested (no PLTRST# pad definition) ===\n");
 		return 2;
 	}
 

@@ -16,38 +16,52 @@ from which TPM CLI the initrd packed (`/bin/tpm2` vs `/bin/tpm`).
 
 Built for Heads by `modules/tpm-gpio-reset`. Uses libpci, /dev/mem for PCR access.
 
-## Register map (verified against Intel doc 834810 and kukri `21c394e`)
+## Register map
 
 PLTRST# is GPP_B13 on every platform in scope. PADCFGLOCK lock bit for
 PLTRST# = community-relative pad index 13, bit position `1<<13`.
 
 | PCH | port | lock_offset | lock_bit | source |
 |-----|------|-------------|----------|--------|
-| SKL/KBL S/H (PCH-H) | 0xaf | 0xa8 | 1<<13 | Intel 332691/335193 + kukri |
-| SKL/KBL LP (PCH-LP) | 0xaf | 0xa8 | 1<<13 | Intel 332691/335193 + kukri |
+| SKL/KBL S/H (PCH-H) | 0xaf | 0x98 | 1<<13 | coreboot gerrit 95661 (PCH-H base 0x90) + Linux SPT_H_PADCFGLOCK |
+| SKL/KBL LP (PCH-LP) | 0xaf | 0xa8 | 1<<13 | Linux SPT_LP_PADCFGLOCK (0xa0) + kukri 21c394e |
 | ADL-P/U/N | 0x6e | 0x80 | 1<<13 | Intel doc 834810 Table 2 |
 | ADL-S | 0x6d | 0x110 | 1<<13 | Intel doc 834810 Table 3 |
-| RPL-P | 0x6e | 0x80 | 1<<13 | same arch as ADL-P |
+| RPL-P | 0x6e | 0x80 | 1<<13 | coreboot RPL-P; see note (doc 834810 Table 2 lists 0x6d/0x110) |
 | RPL-S | 0x6d | 0x110 | 1<<13 | Intel doc 834810 Table 3 |
-| Arrow Lake S | 0x6d | 0x120 | 1<<13 | inteltool.c (datasheet unverified) |
-| CFL | 0x6e | 0x88 | 1<<13 | kukri 21c394e |
+| Arrow Lake S | 0x6d | 0x120 | 1<<13 | Intel doc 834810 Table 3 |
+| CFL | 0x6e | 0x88 | 1<<13 | kukri 21c394e (not listed in 834810) |
 | CML-U/Y | 0x6e | 0x88 | 1<<13 | Intel doc 834810 Table 2 |
-| CML-DT/H | 0x6e | 0x88 | 1<<13 | Intel doc 834810 Table 3 |
-| CNP-LP | 0x6e | 0x88 | 1<<13 | CML 400-series GPIO IP |
+| CML-DT/H | 0x6e | 0x88 | 1<<13 | Intel doc 834810 Table 3; see note (B460/H410 listed 0xaf/0xa8) |
+| CNP-LP | 0x6e | 0x88 | 1<<13 | coreboot cannonlake (not listed in 834810) |
 | EHL | 0x6e | 0x80 | 1<<13 | coreboot elkhartlake (flagged inferred) |
-| JSL | 0x6e | 0x90 | 1<<13 | coreboot jasperlake gpio_defs.h |
-| GLK | 0xc5 | 0x80 | 1<<22 | coreboot apollolake gpio_glk.h |
-| MTL | not vulnerable | - | - | functional GPIO lock |
-| Pre-SKL | not vulnerable | - | - | dedicated PLTRST# pin |
+| JSL | 0x6e | 0x90 | 1<<13 | coreboot jasperlake gpio_defs.h (not listed in 834810) |
+| GLK | 0xc5 | 0x80 | 1<<22 | coreboot apollolake gpio_glk.h (not listed in 834810) |
+| MTL | n/a | - | - | no PLTRST# pad definition (untested) |
+| Pre-SKL | n/a | - | - | no PLTRST# pad definition (untested) |
+
+Intel doc 834810 ("General Purpose I/O Configuration Best Practices", ID
+834810, public) directly lists the PLTRST# PADCFGLOCK offset/bit only for
+ADL-P/U/N, TGL, CML-U, ADL-S/RPL-S, CML-DT (400-series) and ARL-S. Every
+other row above is sourced from coreboot source, Linux, or kukri and is
+NOT confirmed by doc 834810; the EHL row is explicitly inferred.
+
+Two doc-834810 rows conflict with the per-platform values in this tree and
+are flagged rather than silently matched:
+
+- RPL-P: doc 834810 Table 2 groups Raptor Lake P with RPL-HX/H/U at
+  0x6D/0x110, but `rpl_p.c` uses 0x6e/0x80 (same GPIO IP as ADL-P).
+- CML-DT: doc 834810 Table 3 lists the B460/H410 variant at 0xAF/0xA8,
+  but `cml_dt.c` uses 0x6e/0x88 for all CML-DT/H.
 
 Reference: Intel doc 834810 = "General Purpose I/O Configuration Best Practices",
 ID 834810 (public): https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/technical-documentation/gpio-configuration-best-practices.html
 
 LPC/eSPI pin lock offsets from `detect/platforms/*.c` espi pin tables:
-SKL/KBL 0xa0 (port 0xaf); ADL-P/N, CFL, CML-U/Y &amp; CML-DT/H, CNP-LP, TGL
-0x80 (port 0x6e); ADL-S/RPL-S 0x110 (port 0x6d); EHL 0x90 (port 0x6b);
-JSL 0x98 (port 0x6e); GLK 0x90 (port 0xc5). No single group-0 base + 8
-formula holds across families.
+SKL/KBL S/H 0x90 (port 0xaf), SKL/KBL LP 0xa0 (port 0xaf); ADL-P/N, CFL,
+CML-U/Y &amp; CML-DT/H, CNP-LP, TGL 0x80 (port 0x6e); ADL-S/RPL-S 0x110 (port
+0x6d); EHL 0x90 (port 0x6b); JSL 0x98 (port 0x6e); GLK 0x90 (port 0xc5).
+No single group-0 base + 8 formula holds across families.
 
 ## Usage (Heads recovery shell)
 
@@ -86,7 +100,7 @@ pass/fail criterion.
 |------|---------|
 | 0 | DW0 write verified -- the pad reconfigured, PLTRST# edge created (vulnerable) |
 | 1 | DW0 write ignored -- the pad is locked (or host-gated), no reset edge |
-| 2 | platform not vulnerable by design (assertion skipped) |
+| 2 | platform untested -- no PLTRST# pad definition (assertion skipped) |
 | 126 | unknown PCH |
 | 127 | hardware access error (not root, /dev/mem, P2SB) |
 
