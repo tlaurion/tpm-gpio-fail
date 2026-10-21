@@ -32,37 +32,39 @@ struct platform platform_skl_kbl_s_h = {
 		{0}
 	},
 	.global_pins = (struct pin[]) {
-		{ "GPP_B13", "PLTRST#",    0xaf, 0xb0, 1<<5 },
+		/* PLTRST# = GPP_B13; S/H (PCH-H) lock 0x98 (not 0xb0), bit 13 */
+		{ "GPP_B13", "PLTRST#",    0xaf, 0x98, 1<<13 },
 		{0}
 	},
 	.espi_check_port = 0xc7,
 	.espi_check_offset = 0x3418,
 	.espi_check_bit = 1<<1,
 	.lpc_pins = (struct pin[]) {
-		{"GPP_A1",  "LAD0",        0xaf, 0xa0, 1<<1  },
-		{"GPP_A2",  "LAD1",        0xaf, 0xa0, 1<<2  },
-		{"GPP_A3",  "LAD2",        0xaf, 0xa0, 1<<3  },
-		{"GPP_A4",  "LAD3",        0xaf, 0xa0, 1<<4  },
-		{"GPP_A5",  "LFRAME#",     0xaf, 0xa0, 1<<5  },
-		{"GPP_A6",  "SERIRQ",      0xaf, 0xa0, 1<<6  },
-		{"GPP_A8",  "CLKRUN",      0xaf, 0xa0, 1<<8  },
-		{"GPP_A9",  "CLKOUT_LPC0", 0xaf, 0xa0, 1<<9  },
+		{"GPP_A1",  "LAD0",        0xaf, 0x90, 1<<1  },
+		{"GPP_A2",  "LAD1",        0xaf, 0x90, 1<<2  },
+		{"GPP_A3",  "LAD2",        0xaf, 0x90, 1<<3  },
+		{"GPP_A4",  "LAD3",        0xaf, 0x90, 1<<4  },
+		{"GPP_A5",  "LFRAME#",     0xaf, 0x90, 1<<5  },
+		{"GPP_A6",  "SERIRQ",      0xaf, 0x90, 1<<6  },
+		{"GPP_A8",  "CLKRUN",      0xaf, 0x90, 1<<8  },
+		{"GPP_A9",  "CLKOUT_LPC0", 0xaf, 0x90, 1<<9  },
 		{0}
 	},
 	.espi_pins = (struct pin[]) {
-		{"GPP_A1",  "ESPI_IO0",    0xaf, 0xa0, 1<<1  },
-		{"GPP_A2",  "ESPI_IO1",    0xaf, 0xa0, 1<<2  },
-		{"GPP_A3",  "ESPI_IO2",    0xaf, 0xa0, 1<<3  },
-		{"GPP_A4",  "ESPI_IO3",    0xaf, 0xa0, 1<<4  },
-		{"GPP_A5",  "ESPI_CS#",    0xaf, 0xa0, 1<<5  },
-		{"GPP_A9",  "ESPI_CLK",    0xaf, 0xa0, 1<<9  },
-		{"GPP_A14", "ESPI_RESET#", 0xaf, 0xa0, 1<<14 },
+		{"GPP_A1",  "ESPI_IO0",    0xaf, 0x90, 1<<1  },
+		{"GPP_A2",  "ESPI_IO1",    0xaf, 0x90, 1<<2  },
+		{"GPP_A3",  "ESPI_IO2",    0xaf, 0x90, 1<<3  },
+		{"GPP_A4",  "ESPI_IO3",    0xaf, 0x90, 1<<4  },
+		{"GPP_A5",  "ESPI_CS#",    0xaf, 0x90, 1<<5  },
+		{"GPP_A9",  "ESPI_CLK",    0xaf, 0x90, 1<<9  },
+		{"GPP_A14", "ESPI_RESET#", 0xaf, 0x90, 1<<14 },
 		{0}
 	},
 	.tier = 1,
 	.summary = "SKL/KBL S/H: confirmed vulnerable by kukri",
 	.pad_cfg_base = 0x400,
-	.pad_stride = 8
+	.pad_stride = 8,
+	.dw0_offset = 0x528  /* PLTRST#: live-verified on T480; auto-derive (base + ctz(bit)*stride) is wrong for SKL */
 };
 
 struct platform platform_skl_kbl_lp = {
@@ -80,7 +82,8 @@ struct platform platform_skl_kbl_lp = {
 		{0}
 	},
 	.global_pins = (struct pin[]) {
-		{ "GPP_B13", "PLTRST#",    0xaf, 0xb0, 1<<5 },
+		/* PLTRST# = GPP_B13; LP lock 0xa8 (not 0xb0 = GPP_C's lock), bit 13 */
+		{ "GPP_B13", "PLTRST#",    0xaf, 0xa8, 1<<13 },
 		{0}
 	},
 	.espi_check_port = 0xc7,
@@ -110,5 +113,6 @@ struct platform platform_skl_kbl_lp = {
 	.tier = 2,
 	.summary = "SKL/KBL LP: same GPIO arch as confirmed S/H, untested",
 	.pad_cfg_base = 0x400,
-	.pad_stride = 8
+	.pad_stride = 8,
+	.dw0_offset = 0x528  /* PLTRST#: live-verified on T480 (PCH 0x9d4e); auto-derive is wrong for SKL */
 };
