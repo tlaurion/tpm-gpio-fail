@@ -110,8 +110,8 @@ struct platform platform_skl_kbl_lp = {
 		{"GPP_A14", "ESPI_RESET#", 0xaf, 0xa0, 1<<14 },
 		{0}
 	},
-	.tier = 2,
-	.summary = "SKL/KBL LP: same GPIO arch as confirmed S/H, untested",
+	.tier = 1,
+	.summary = "SKL/KBL LP: confirmed vulnerable on x280 (issue #9)",
 	.pad_cfg_base = 0x400,
 	.pad_stride = 8,
 	.dw0_offset = 0x528  /* PLTRST#: live-verified on T480 (PCH 0x9d4e); auto-derive is wrong for SKL */

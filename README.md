@@ -36,18 +36,21 @@ umount /media
 
 | Code | Meaning |
 |---|---|
-| 0 | DW0 write verified -- the pad reconfigured, PLTRST# edge created (vulnerable) |
-| 1 | DW0 write ignored -- the pad is locked (or host-gated), no reset edge |
+| 0 | PADCFGLOCK cleared (if set) and DW0 write verified -- PLTRST# edge created (vulnerable) |
+| 1 | PADCFGLOCK re-locked by SMM, or DW0 write ignored -- no reset edge |
 | 2 | platform not vulnerable by design (assertion skipped) |
 | 126 | unknown PCH |
 | 127 | hardware access error (not root, /dev/mem, P2SB) |
 
-An exit 1 on a board that should be vulnerable is ambiguous between
-"the firmware locked the pad" and "the host does not own the GPIO
-community". Both tools print the discriminator: `HOST_OWN` (SKL/KBL
-only, 0xAF:0xD4 bit 13; 1 = host owns the pad, 0 = SMM keeps ownership
-and host writes are gated) and the `DW0 domain` (bits 31:30:
-0=RSMRST/PWROK, 1=DEEP, 2=PLTRST, 3=unmapped/GLBRST).
+`tpm-gpio-assert` emulates a local root attacker: if PADCFGLOCK is set
+it first clears the pad's lock bit (PADCFGLOCK is RW, per Intel 100
+Series PCH Vol 2 25.1.10/25.1.12), re-reads it, and only then writes
+DW0. A firmware lock only mitigates the attack if SMM re-locks the pad
+after the clear attempt (reported as "re-locked"). `HOSTSW_OWN` (SKL/KBL
+only, 0xAF:0xD4 bit 13) is *not* a write gate -- it selects whether GPIO
+input events update GPI_STS (1) or the SMI/GPE status registers (0).
+The `DW0 domain` line (bits 31:30: 0=RSMRST/PWROK, 1=DEEP, 2=PLTRST,
+3=unmapped/GLBRST) is informational.
 
 On emulated boards (QEMU i440fx `0x7010` / Q35 `0x2918` LPC bridges)
 both tools name the emulated chipset and exit 126 -- expected, not an
@@ -70,11 +73,11 @@ umount /media
 # 2. Flash the FIXED firmware (pad lock enabled), repeat. Expect exit 1.
 ```
 
-Expected: pre-test exit 0 (write verified, PCRs cleared), post-test
-exit 1 (write ignored, pad locked). If the pre-test already exits 1,
-check the HOST_OWN line before blaming the ROM: HOST_OWN = 0 means the
-host does not own the GPIO community, so the pad reconfiguration is
-gated regardless of the pad lock.
+Expected: pre-test exit 0 (lock cleared, write verified, PCRs cleared),
+post-test exit 1 (SMM re-locks the pad, write ignored). If the pre-test
+already exits 1, read the `PADCFGLOCK Bypass` line before blaming the
+ROM: `re-locked` means SMM enforced the lock even on the supposedly
+unfixed firmware, so that build is already mitigated.
 
 ## Tested
 

