@@ -139,11 +139,13 @@ static int scan_platform(struct platform *platform, int *pltrst_locked_out)
 		       ((dw0 >> 30) & 3) == 2 ? "PLTRST" :
 		       ((dw0 >> 30) & 3) == 3 ? "unmapped/GLBRST" : "RSMRST/PWROK",
 		       (unsigned)((dw0 >> 30) & 3));
-		/* HOST_OWN for GPP_B13 (SKL/KBL community 0, group 1): 1 = host owns
-		 * the pad (reconfigurable), 0 = SMM keeps ownership (host writes gated) */
+		/* HOSTSW_OWN_GPP_B (SKL/KBL community 0): 1 = GPIO Driver Mode,
+		 * 0 = ACPI Mode. It selects which status register input events
+		 * update; it does NOT gate pad-configuration writes. */
 		if (platform->global_pins->port == 0xaf) {
 			uint32_t host_own = pcr_read32(0xaf, 0xd4);
-			printf("HOST_OWN (0xAF:0xD4 bit 13, GPP_B13) = %d\n",
+			printf("HOSTSW_OWN (0xAF:0xD4 bit 13, GPP_B13) = %d "
+			       "(event routing only; does not gate pad writes)\n",
 			       !!(host_own & (1u << 13)));
 		}
 		if (pad_mode == 1)
@@ -183,8 +185,11 @@ static int scan_platform(struct platform *platform, int *pltrst_locked_out)
 	if (platform->tier == -1) {
 		printf("NOT VULNERABLE: %s\n", platform->summary);
 	} else if (pltrst_locked) {
-		printf("MITIGATED: PLTRST# pad configuration locked (PADCFGLOCK set)\n");
-		printf("Pad reconfiguration writes are ignored; PLTRST# assertion blocked.\n");
+		printf("PLTRST# pad config locked by firmware (PADCFGLOCK set).\n");
+		printf("PADCFGLOCK is RW (Intel 100 Series PCH Vol 2 25.1.10): local\n");
+		printf("software can clear it before reconfiguring the pad. Run\n");
+		printf("tpm-gpio-assert to see whether the clear sticks (vulnerable)\n");
+		printf("or SMM re-locks the pad (mitigated).\n");
 	} else if (platform->tier == 1) {
 		printf("TIER 1 -- CONFIRMED VULNERABLE: %s\n", platform->summary);
 		printf("Attack confirmed working by community testing.\n");
@@ -339,7 +344,7 @@ int main(void)
 	}
 
 	printf("\n=== RESULT: PLTRST# pad %s; %d pin%s unlocked ===\n",
-	       pltrst_locked == 1 ? "LOCKED (mitigated)" :
+	       pltrst_locked == 1 ? "LOCKED by firmware (clearable -- run assert)" :
 	       pltrst_locked == 0 ? "UNLOCKED (vulnerable)" : "not affected",
 	       err, err == 1 ? "" : "s");
 	return err;
