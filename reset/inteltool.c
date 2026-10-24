@@ -272,9 +272,8 @@ int main(int argc, char *argv[])
 		break;
 
 	default:
-		if ((sb->device_id & 0xfff0) == 0x9d40
-		    && sb->device_id >= 0x9d4b
-		    && sb->device_id <= 0x9d58) {
+		if (((sb->device_id & 0xfff0) == 0x9d40 && sb->device_id >= 0x9d4b)
+		    || ((sb->device_id & 0xfff0) == 0x9d50 && sb->device_id <= 0x9d58)) {
 			printf("Found Sunrise Point LP PCH\n");
 			known_pch = 1;
 			port = 0xaf;
